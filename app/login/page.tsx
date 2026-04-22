@@ -81,7 +81,7 @@ function LoginInner() {
   }
 
   return (
-    <main className="relative min-h-screen overflow-hidden bg-bg text-text">
+    <main data-theme="dark" className="relative min-h-screen overflow-hidden bg-bg text-text">
       {/* ========= Ambient background layers ========= */}
       {/* Radial base wash */}
       <div
