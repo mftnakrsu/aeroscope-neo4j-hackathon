@@ -1,0 +1,23 @@
+# Python pipeline — not part of the Vercel build
+src/
+tests/
+Makefile
+requirements.txt
+
+# Large / generated data the web app does not need
+data/synthetic/
+data/placeholders/
+data/embeddings_cache/
+
+# Docs, demo walkthroughs, build-plan scratch pad
+docs/
+demo/
+HACKATHON_PLAN/
+
+# Python tooling
+.venv/
+__pycache__/
+*.pyc
+
+# VCS metadata (Vercel clones fresh, we don't need to upload it)
+.git/

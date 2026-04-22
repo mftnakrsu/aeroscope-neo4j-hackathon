@@ -1,0 +1,309 @@
+/* ===== AeroScope — design tokens =====
+   Adapted from a mission-control palette: amber signal accent on dark,
+   Neo4j-ish blue on light. Themed via [data-theme] on <html>. */
+
+:root {
+  /* Dark / Mission Control (default) */
+  --bg: #0b0e13;
+  --bg-1: #11151d;
+  --bg-2: #161b26;
+  --bg-3: #1d2432;
+  --bg-hover: #1a2130;
+  --line: #242c3a;
+  --line-2: #2e3849;
+  --text: #e6eaf2;
+  --text-2: #a8b2c5;
+  --text-3: #6b7689;
+  --text-4: #4a5368;
+
+  --accent: #ffb020;       /* signal amber */
+  --accent-2: #ffcc5c;
+  --cyan: #4fd1c5;
+  --cyan-2: #7de7dd;
+  --green: #58d68d;
+  --red: #ff6b6b;
+  --magenta: #c8a2ff;
+  --blue: #6aa9ff;
+  --ok: #58d68d;
+  --warn: #ffb020;
+  --danger: #ff6b6b;
+
+  --r-sm: 4px;
+  --r-md: 6px;
+  --r-lg: 10px;
+
+  --shadow-1: 0 1px 0 rgba(255, 255, 255, 0.03) inset, 0 1px 2px rgba(0, 0, 0, 0.4);
+  --shadow-2: 0 8px 24px rgba(0, 0, 0, 0.35), 0 1px 0 rgba(255, 255, 255, 0.03) inset;
+  --shadow-glow: 0 0 0 1px rgba(255, 176, 32, 0.15), 0 0 20px rgba(255, 176, 32, 0.08);
+
+  --font-sans:
+    "Geist", "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI",
+    system-ui, sans-serif;
+  --font-mono:
+    "JetBrains Mono", "IBM Plex Mono", "Geist Mono", ui-monospace,
+    SFMono-Regular, Consolas, monospace;
+
+  --nav-w: 240px;
+}
+
+/* Light / Corporate (Neo4j-ish) */
+html[data-theme="light"] {
+  --bg: #f5f6f8;
+  --bg-1: #ffffff;
+  --bg-2: #ffffff;
+  --bg-3: #f0f2f5;
+  --bg-hover: #eef1f5;
+  --line: #e2e6ec;
+  --line-2: #cdd3dc;
+  --text: #0f1420;
+  --text-2: #3e4a5f;
+  --text-3: #6b7689;
+  --text-4: #8892a3;
+  --accent: #0052cc;
+  --accent-2: #2a6fe0;
+  --cyan: #0694a2;
+  --green: #2c9d5d;
+  --red: #c8372d;
+  --magenta: #6f3fd1;
+  --blue: #0052cc;
+  --shadow-1: 0 1px 2px rgba(15, 20, 32, 0.06);
+  --shadow-2: 0 10px 30px rgba(15, 20, 32, 0.08);
+  --shadow-glow: 0 0 0 3px rgba(0, 82, 204, 0.15);
+}
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font-sans);
+  font-size: 14px;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+button {
+  font-family: inherit;
+  color: inherit;
+  cursor: pointer;
+}
+
+input,
+textarea,
+select {
+  font-family: inherit;
+  color: inherit;
+}
+
+.mono {
+  font-family: var(--font-mono);
+}
+
+/* ===== Scrollbars ===== */
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: var(--line-2);
+  border-radius: 10px;
+  border: 2px solid var(--bg);
+}
+::-webkit-scrollbar-thumb:hover {
+  background: var(--text-4);
+}
+
+/* ===== Brand mark ===== */
+.brand-mark {
+  width: 28px;
+  height: 28px;
+  display: grid;
+  place-items: center;
+  background: var(--accent);
+  color: #000;
+  border-radius: var(--r-sm);
+  font-family: var(--font-mono);
+  font-weight: 700;
+  font-size: 13px;
+  letter-spacing: -0.02em;
+}
+
+/* ===== Buttons ===== */
+.btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 32px;
+  padding: 0 14px;
+  background: var(--bg-2);
+  border: 1px solid var(--line);
+  border-radius: var(--r-md);
+  color: var(--text);
+  font-size: 13px;
+  font-weight: 500;
+  transition:
+    background 0.12s,
+    border-color 0.12s;
+  white-space: nowrap;
+  text-decoration: none;
+}
+.btn:hover {
+  background: var(--bg-hover);
+  border-color: var(--line-2);
+}
+.btn.primary {
+  background: var(--accent);
+  color: #000;
+  border-color: transparent;
+  font-weight: 600;
+}
+.btn.primary:hover {
+  background: var(--accent-2);
+}
+.btn.ghost {
+  background: transparent;
+}
+.btn.ghost:hover {
+  background: var(--bg-hover);
+}
+.btn.sm {
+  height: 26px;
+  padding: 0 10px;
+  font-size: 12px;
+}
+
+/* ===== Chips / badges ===== */
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  padding: 2px 7px;
+  border-radius: 100px;
+  background: var(--bg-3);
+  border: 1px solid var(--line);
+  color: var(--text-2);
+  line-height: 1.6;
+  white-space: nowrap;
+}
+.chip.id {
+  color: var(--accent);
+  border-color: rgba(255, 176, 32, 0.3);
+  background: rgba(255, 176, 32, 0.08);
+  font-weight: 600;
+}
+.chip.ok,
+.chip.verified {
+  color: var(--green);
+  border-color: rgba(88, 214, 141, 0.3);
+  background: rgba(88, 214, 141, 0.08);
+}
+.chip.warn,
+.chip.partial {
+  color: var(--accent);
+  border-color: rgba(255, 176, 32, 0.3);
+  background: rgba(255, 176, 32, 0.08);
+}
+.chip.danger,
+.chip.gap {
+  color: var(--red);
+  border-color: rgba(255, 107, 107, 0.3);
+  background: rgba(255, 107, 107, 0.08);
+}
+.chip.standard {
+  color: var(--cyan);
+  border-color: rgba(79, 209, 197, 0.3);
+  background: rgba(79, 209, 197, 0.08);
+}
+.chip.system {
+  color: var(--blue);
+  border-color: rgba(106, 169, 255, 0.3);
+  background: rgba(106, 169, 255, 0.08);
+}
+.chip.component {
+  color: var(--magenta);
+  border-color: rgba(200, 162, 255, 0.3);
+  background: rgba(200, 162, 255, 0.08);
+}
+
+/* ===== Inputs ===== */
+.input {
+  width: 100%;
+  height: 40px;
+  background: var(--bg-2);
+  border: 1px solid var(--line);
+  border-radius: var(--r-md);
+  color: var(--text);
+  font-size: 13px;
+  padding: 0 12px;
+  outline: none;
+  transition:
+    border-color 0.15s,
+    box-shadow 0.15s;
+}
+.input:focus {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px rgba(255, 176, 32, 0.12);
+}
+
+/* ===== Cards ===== */
+.card {
+  background: var(--bg-1);
+  border: 1px solid var(--line);
+  border-radius: var(--r-lg);
+  box-shadow: var(--shadow-1);
+}
+.card.pad {
+  padding: 16px;
+}
+
+/* ===== Animations ===== */
+@keyframes pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.4;
+  }
+}
+@keyframes radar-sweep {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+@keyframes blink {
+  50% {
+    opacity: 0;
+  }
+}
+
+/* ===== Utility ===== */
+.hstack {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.vstack {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.spacer {
+  flex: 1;
+}

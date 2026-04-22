@@ -1,0 +1,30 @@
+{
+  "name": "aeroscope",
+  "version": "0.1.0",
+  "private": true,
+  "description": "AeroScope — aerospace requirements traceability agent on Neo4j Aura (Hackathon 2026)",
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "lint": "next lint",
+    "scrub-check": "grep -rlE \"TAI\\b|ANKA|Aksungur|KAAN|TOLUN|TUSA[SŞ]|ASELSAN|ROKETSAN|BAYKAR|HAVELSAN|TEI\\b|T[uü]rk|TSK|Turkish Aerospace|MUM-T\" app components lib middleware.ts 2>/dev/null | grep -v node_modules || echo 'scrub-check: 0 hits'"
+  },
+  "dependencies": {
+    "next": "^14.2.33",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "neo4j-driver": "^5.28.1",
+    "@supabase/ssr": "^0.5.2",
+    "@supabase/supabase-js": "^2.46.1"
+  },
+  "devDependencies": {
+    "@types/node": "^20.14.0",
+    "@types/react": "^18.3.3",
+    "@types/react-dom": "^18.3.0",
+    "autoprefixer": "^10.4.20",
+    "postcss": "^8.4.49",
+    "tailwindcss": "^3.4.15",
+    "typescript": "^5.5.4"
+  }
+}
