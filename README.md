@@ -34,6 +34,26 @@ Requirements engineering is nothing but relationships — `SATISFIES`, `DERIVES_
 
 ---
 
+## How AeroScope thinks
+
+<p align="center">
+  <img src="public/how-aeroscope-thinks.png" alt="AeroScope reasoning pipeline — user question → agent → query planning → Neo4j graph → traversal → LLM explanation → impact analysis" width="100%"/>
+</p>
+
+A question like *"Which requirements are affected if we change the 28V undervoltage threshold?"* walks through seven stages: the agent plans the right tool (Cypher Template, Text2Cypher, or Similarity Search), runs it against a context-rich knowledge graph (1,000+ requirements, 20+ standards, 14 relationship types, components, platforms, operational modes), traces multi-hop dependencies, and the LLM explains *why* each connection matters — affected requirements, tests that must rerun, compliance risks, and a written justification. The graph surfaces both explicit relationships and LLM-discovered implicit ones; explanations are grounded in the Cypher that produced them.
+
+---
+
+## Impact Analysis: What Breaks If This Changes?
+
+<p align="center">
+  <img src="public/impact-analysis.png" alt="Impact analysis — upstream needs and downstream effects radiate from a single requirement through explicit and LLM-discovered links" width="100%"/>
+</p>
+
+Pick any requirement and AeroScope fans out in both directions. **Upstream**, it answers *why this requirement exists* — the stakeholder needs it satisfies. **Downstream**, it answers *what is affected if it changes* — the monitoring logic that derives from it, the tests that verify it, the components it constrains, and the standards it references. The same traversal surfaces both the explicit trace links that engineers wrote by hand and the implicit `SEMANTICALLY_DEPENDS_ON` edges an LLM inferred offline, so a change-control board can see the full blast radius — not just the links that happened to be typed into DOORS.
+
+---
+
 ## How it works
 
 - **Next.js 14 App Router** web UI renders the dashboard, query console, and traceability views.
