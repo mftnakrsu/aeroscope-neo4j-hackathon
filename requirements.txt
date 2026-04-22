@@ -1,0 +1,14 @@
+# Neo4j
+neo4j>=5.14,<6
+
+# OpenAI
+openai>=1.14
+
+# Env loading
+python-dotenv>=1.0
+
+# Progress bars in scripts
+tqdm>=4.66
+
+# Token counting for LLM batching
+tiktoken>=0.5
