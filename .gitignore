@@ -17,7 +17,6 @@ venv/
 # Generated synthetic data (regenerate via src/generate_corpus.py)
 data/synthetic/generated/
 data/synthetic/*.jsonl
-data/synthetic/*.md
 
 # Caches
 data/embeddings_cache/
