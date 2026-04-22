@@ -107,6 +107,76 @@ export default function Home() {
         </div>
       </section>
 
+      {/* How AeroScope Thinks — infographic showcase */}
+      <section className="max-w-container mx-auto px-6 pb-20">
+        <div className="mb-10">
+          <span className="inline-flex items-center gap-2 text-[11px] font-mono text-cyan uppercase tracking-wider border border-cyan/30 bg-cyan/10 px-3 py-1 rounded-full mb-5">
+            <span className="w-1.5 h-1.5 rounded-full bg-cyan" />
+            Reasoning pipeline
+          </span>
+          <h2 className="text-4xl font-semibold tracking-tight mb-4 leading-tight">
+            How AeroScope thinks
+          </h2>
+          <p className="text-base text-text-2 max-w-3xl leading-relaxed">
+            A question walks through seven stages: the agent picks the right
+            tool, runs it against a context-rich knowledge graph, traces
+            multi-hop dependencies, and the LLM explains <em>why</em> each
+            connection matters — grounded in the Cypher that produced it.
+          </p>
+        </div>
+        <div
+          className="relative overflow-hidden rounded-[14px] border bg-white"
+          style={{
+            borderColor: "var(--line-2)",
+            boxShadow: "var(--shadow-2)",
+          }}
+        >
+          <Image
+            src="/how-aeroscope-thinks.png"
+            alt="AeroScope reasoning pipeline — 7 stages from user question to impact analysis"
+            width={1600}
+            height={900}
+            className="w-full h-auto"
+          />
+        </div>
+      </section>
+
+      {/* Impact Analysis showcase */}
+      <section className="max-w-container mx-auto px-6 pb-24">
+        <div className="mb-10">
+          <span className="inline-flex items-center gap-2 text-[11px] font-mono text-accent uppercase tracking-wider border border-accent/30 bg-accent/10 px-3 py-1 rounded-full mb-5">
+            <span className="w-1.5 h-1.5 rounded-full bg-accent" />
+            Impact analysis
+          </span>
+          <h2 className="text-4xl font-semibold tracking-tight mb-4 leading-tight">
+            What breaks if this changes?
+          </h2>
+          <p className="text-base text-text-2 max-w-3xl leading-relaxed">
+            Pick any requirement and AeroScope fans out in both directions.
+            Upstream to the stakeholder needs that justified it; downstream to
+            the monitoring logic, tests, components, and standards it
+            constrains. Explicit trace links <strong>and</strong> LLM-discovered
+            implicit ones, so a change-control board sees the full blast
+            radius — not just the links engineers remembered to type in.
+          </p>
+        </div>
+        <div
+          className="relative overflow-hidden rounded-[14px] border bg-white"
+          style={{
+            borderColor: "var(--line-2)",
+            boxShadow: "var(--shadow-2)",
+          }}
+        >
+          <Image
+            src="/impact-analysis.png"
+            alt="Impact analysis — upstream stakeholder needs and downstream effects radiate from a single requirement through explicit and LLM-discovered links"
+            width={1600}
+            height={900}
+            className="w-full h-auto"
+          />
+        </div>
+      </section>
+
       <footer className="border-t border-line bg-bg-1 mt-12">
         <div className="max-w-container mx-auto px-6 py-6 flex items-center gap-4 text-xs font-mono text-text-3 uppercase tracking-wider">
           <span>AeroSys Dynamics · fictional domain</span>
