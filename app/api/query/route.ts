@@ -229,8 +229,12 @@ export async function POST(req: NextRequest) {
     return errorResponse(msg, 500);
   }
 
+  // Aura instances often use a non-default database name (typically the
+  // instance ID). Read NEO4J_DATABASE from env; if unset, omit the option
+  // and let the driver target the DBMS's default database.
+  const databaseName = process.env.NEO4J_DATABASE?.trim();
   const session = driver.session({
-    database: "neo4j",
+    ...(databaseName ? { database: databaseName } : {}),
     defaultAccessMode: neo4j.session.READ,
   });
 
