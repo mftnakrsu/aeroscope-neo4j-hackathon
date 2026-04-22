@@ -4,7 +4,7 @@ Pre-populates the knowledge graph with :Platform, :Standard, :Stakeholder,
 :Organization, :Interface, and :OperationalMode nodes BEFORE the requirements
 pipeline runs. All entities here are fictional AeroSys Dynamics domain
 (Stratos-7 / AeroLynx-X2 / Skyrunner-T1 / Nimbus-C3) or real public standards
-and international suppliers — no <redacted>/<redacted>/<redacted> references.
+and international suppliers. No real aircraft programs or contractors.
 
 Sources:
   - docs/design/01_synthetic_domain.md (platforms, stakeholders, cert matrix)

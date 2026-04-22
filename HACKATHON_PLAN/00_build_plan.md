@@ -90,7 +90,7 @@
 5. Design: final graph schema → `aura/schema.cypher` + `docs/02_schema.md`
 6. Port: `config.py` + `llm_utils.py` (OpenAI API based)
 7. Port: `scripts/md_to_jsonl.py` → `src/md_to_jsonl.py` (strip Turkish-only logic but keep keyword aliases)
-8. Port: `graph_builder.py` + `entity_extractor.py` (remove <redacted>/<redacted> regex, switch to generic aerospace)
+8. Port: `graph_builder.py` + `entity_extractor.py` (strip client-specific regex, switch to generic aerospace)
 9. Port: `requirement_enricher.py` + `implicit_linker.py` + `compute_embeddings.py`
 10. Write: `requirements.txt` (pinned) + overall scaffolding files
 11. Design: 10 "wow" demo queries → `demo/demo_queries.md`

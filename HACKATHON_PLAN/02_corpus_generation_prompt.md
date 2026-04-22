@@ -27,7 +27,7 @@ Produce a **synthetic but technically rigorous** requirements corpus for a Neo4j
 # Non-negotiable constraints
 
 1. **English only** throughout (metadata, requirement text, trace links, tables, notes). No other language.
-2. **No references** anywhere to: <redacted>, <redacted>, <redacted>, <redacted>, <redacted>, <redacted>, <redacted>, <redacted>, <redacted>, <redacted>, <redacted>, <redacted>, <redacted>, <redacted>. These are proprietary names and must not appear.
+2. **No references** to any real aerospace company, defense contractor, aircraft program, or UAV platform name. All names must be drawn from the fictional AeroSys Dynamics domain only.
 3. **Fictional names only** for the company and platforms — exactly as specified below. Do not invent new platforms or rename the given ones.
 4. **Real public standards** are fine and encouraged: DO-178C, DO-254, DO-160G, ARP4754A, ARP4761, MIL-STD-1553B, ARINC 429, STANAG 4586, STANAG 7085, MIL-STD-1760, MIL-STD-810H, MIL-STD-882E, DO-297, ARINC 653, DO-278A, DO-326A, DO-355, DO-356A.
 5. **Real international suppliers** may be cited (Boeing, Airbus, Honeywell, Collins, Safran, Leonardo, MBDA, GE, Pratt & Whitney, Rolls-Royce, Thales, Raytheon) as context; never as authors.
@@ -332,7 +332,7 @@ Use deep research **especially** when writing: ENG (FADEC details), ADS (pitot-s
 - [ ] Cross-refs use `##<MODULE>.<ID>` (no space after `##`).
 - [ ] Every "shall" is testable (has numbers / rates / units).
 - [ ] Table rows have `-{40,}` separator lines between them (dash count permissive, minimum 40 for safety).
-- [ ] No <redacted> / <redacted> / <redacted> / <redacted> / <redacted> / <redacted> / <redacted> / <redacted> / <redacted> anywhere.
+- [ ] No real company or program names anywhere — fictional domain only.
 - [ ] Platform names are exactly: Stratos-7, AeroLynx-X2, Skyrunner-T1, Nimbus-C3.
 - [ ] DAL assignments per §4.
 - [ ] Req type mix per §6.2 (roughly).

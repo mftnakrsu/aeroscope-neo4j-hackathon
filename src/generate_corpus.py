@@ -241,9 +241,9 @@ Company: {COMPANY_NAME}, founded 1998, ~3200 employees. Product line: four
 UAV platforms (Stratos-7, AeroLynx-X2, Skyrunner-T1, Nimbus-C3), mission
 avionics, ground control stations, and certification services.
 
-Never mention: <redacted>, <redacted>, <redacted>, <redacted>, <redacted>, <redacted>, <redacted>, or any
-real-world aircraft/company names. Names are drawn solely from the
-fictional AeroSys Dynamics domain."""
+Never mention real-world aircraft programs, defense contractors, or
+aerospace company names. All names are drawn solely from the fictional
+AeroSys Dynamics domain."""
 
 
 def _platform_block() -> str:
