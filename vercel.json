@@ -1,0 +1,11 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "framework": "nextjs",
+  "regions": ["fra1"],
+  "functions": {
+    "app/api/query/route.ts": {
+      "maxDuration": 20,
+      "includeFiles": "aura/cypher_templates/**"
+    }
+  }
+}

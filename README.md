@@ -1,58 +1,128 @@
-# AeroScope
+<p align="center">
+  <img src="public/banner.png" alt="AeroScope — trace aerospace requirements like a systems engineer" width="100%"/>
+</p>
 
-> An aerospace requirements traceability agent on Neo4j Aura.
+<h1 align="center">AeroScope</h1>
 
-**Submission for:** Neo4j Aura Agents & Context Building Hackathon (April–June 2026)
-**Status:** 🚧 Work in progress — see [HACKATHON_PLAN/](HACKATHON_PLAN/) for the build plan.
+<p align="center">
+  <strong>Trace. Understand. Assure.</strong><br/>
+  An aerospace requirements traceability agent on Neo4j Aura — walk the graph, explain the impact.
+</p>
+
+<p align="center">
+  <a href="https://neo4j.com/"><img src="https://img.shields.io/badge/Neo4j%20Aura%20Agents%20%26%20Context%20Building-Hackathon%202026-008CC1" alt="Hackathon 2026"/></a>
+  <a href="https://nextjs.org/"><img src="https://img.shields.io/badge/Next.js-14-black" alt="Next.js 14"/></a>
+  <a href="https://supabase.com/"><img src="https://img.shields.io/badge/Auth-Supabase-3ECF8E" alt="Supabase Auth"/></a>
+  <a href="LICENSE"><img src="https://img.shields.io/badge/License-MIT-green.svg" alt="MIT License"/></a>
+</p>
+
+---
+
+## Live demo
+
+**https://aeroscope-neo4j-hackathon.vercel.app**
+
+Sign in with email/password or continue with Google — auth is handled by Supabase. New Google accounts are created on first sign-in.
 
 ---
 
 ## What it does
 
-AeroScope is an agent that reasons over aerospace requirements like an experienced systems engineer would. Ask it a question like:
+AeroScope reasons over aerospace requirements the way an experienced systems engineer would. Ask it something like *"Which safety-critical requirements depend on the bus voltage threshold we're about to change?"* and it walks the graph — finding the target requirement, tracing upstream to stakeholder needs, downstream to test procedures, flagging the standards it must comply with (DO-178C, ARP4754A, MIL-STD-1553B), and surfacing implicit dependencies an LLM discovered offline. Every answer comes with the Cypher that produced it, so you can see *why* each connection matters rather than trusting a black box.
 
-> *"Which safety-critical requirements depend on the bus voltage threshold we're about to change?"*
+Requirements engineering is nothing but relationships — `SATISFIES`, `DERIVES_FROM`, `VERIFIES`, `REFERENCES_STANDARD`, `ALLOCATED_TO`. Document search can find *a* requirement; only a graph can answer *"what breaks if I change this one?"*. AeroScope pairs a curated Cypher-template toolbox for predictable traces (impact analysis, coverage, orphan detection) with a free-form Text2Cypher escape hatch for exploratory questions, all grounded in a ~1,000-requirement synthetic corpus across 30 modules and four fictional UAV platforms (Stratos-7, AeroLynx-X2, Skyrunner-T1, Nimbus-C3).
 
-…and it walks the graph: finds the target requirement, traces it upstream to stakeholder needs, downstream to test procedures, flags the standards it must comply with (DO-178C, ARP4754A, MIL-STD-1553B…), and surfaces implicit dependencies that an LLM discovered offline — explaining **why** each connection matters, not just returning a list.
+---
 
-## Dataset and why a graph fits
+## How it works
 
-- **Corpus:** 1000 synthetic aerospace requirements generated from the same MD export format used by IBM DOORS Classic 9.7. Covers ~30 modules across three fictional UAV platforms.
-- **Why a graph:** Requirements engineering is *nothing but* relationships — `SATISFIES`, `DERIVES_FROM`, `VERIFIES`, `REFERENCES_STANDARD`, `ALLOCATED_TO`. Document retrieval can find *a* requirement; only a graph can answer "what breaks if I change this one?"
-- **Extra context layer:** LLM-discovered `SEMANTICALLY_DEPENDS_ON`, `COMPLEMENTS`, `CONSTRAINS` relationships surface dependencies that aren't written down.
-
-## Tools the agent uses
-
-| Tool | What it handles |
-|---|---|
-| **Cypher Template** | Predictable trace queries (impact analysis, coverage, orphan detection) |
-| **Text2Cypher** | Free-form questions against the full schema |
-| **Similarity Search** | Vector search over requirement text + summary embeddings |
-
-## Repo layout
+- **Next.js 14 App Router** web UI renders the dashboard, query console, and traceability views.
+- **`/api/query`** serverless route (Node runtime, `fra1` region) accepts a `template_id` + params, loads the matching whitelisted Cypher from `aura/cypher_templates/*.json`, and runs it against Neo4j Aura.
+- **Cypher templates as a whitelist** — the server will not execute arbitrary Cypher from the client; every template is version-controlled in the repo.
+- **Supabase auth** (email/password + Google OAuth) gates `/dashboard/*` via Edge middleware that refreshes the session cookie on every request.
+- **Python pipeline** (dev-only, not deployed) generates the synthetic corpus, loads it to Aura, enriches relationships, and caches embeddings.
 
 ```
-src/          Python data pipeline (parse → graph → enrich → embed)
-aura/         Cypher schema + Aura Agent tool configs
-data/         Placeholder templates + generated synthetic corpus
-demo/         Curated demo queries with expected traversals
-docs/         Design docs (domain, schema, tools)
-website/      Landing page for the submission
-HACKATHON_PLAN/  Build plan, per-step progress notes
+browser ── /dashboard ──┐
+                        ├── Edge middleware (Supabase session)
+                        ▼
+                  Next.js page ── fetch /api/query ──► Node serverless (fra1)
+                                                         │
+                                                         ├── whitelist lookup
+                                                         │   (aura/cypher_templates/*.json)
+                                                         │
+                                                         └── neo4j-driver ──► Neo4j Aura
 ```
 
-## Try it
+---
 
-*(Setup instructions will be filled in once the pipeline is complete.)*
+## Tech stack
+
+- **Frontend:** Next.js 14 (App Router), React 18, TypeScript, Tailwind CSS
+- **Runtime:** Node 20 serverless functions on Vercel (region `fra1`)
+- **Database:** Neo4j Aura (EU region recommended to keep latency with `fra1`)
+- **Auth:** Supabase (`@supabase/ssr`) — email/password + Google OAuth, cookie-based sessions refreshed in Edge middleware
+- **Python pipeline:** Python 3.9+, `neo4j-driver`, `openai` for corpus generation and enrichment
+
+---
+
+## Local dev
 
 ```bash
-# High level (coming soon)
-pip install -r requirements.txt
-python src/generate_corpus.py --count 1000 --output data/synthetic/
-python src/load_to_aura.py
-# Then: open your Aura Agent and ask away
+# 1. Copy env template and fill in credentials
+cp .env.example .env.local
+# Edit .env.local — set:
+#   NEO4J_URI, NEO4J_USER, NEO4J_PASSWORD
+#   NEXT_PUBLIC_SUPABASE_URL, NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY
+#   OPENAI_API_KEY (only if you will regenerate the corpus)
+
+# 2. Install and run
+npm install
+npm run dev
+# open http://localhost:3000 — click "Sign in"
 ```
+
+Other scripts:
+
+```bash
+npm run build         # production build
+npm run start         # serve the production build
+npm run scrub-check   # guardrail — fails if proprietary names sneak in
+```
+
+### Supabase setup
+
+1. Create a free project at <https://supabase.com/>.
+2. In **Project Settings → API**, copy the **Project URL** into `NEXT_PUBLIC_SUPABASE_URL` and the **Publishable key** into `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY`.
+3. In **Authentication → Providers → Google**, enable Google and paste your Google OAuth client ID + secret. The redirect URL Supabase gives you (`https://<your-project>.supabase.co/auth/v1/callback`) must be added as an authorized redirect URI in your Google OAuth client.
+4. In **Authentication → URL Configuration**, add `http://localhost:3000` and your Vercel URL to the **Site URL** / **Redirect URLs** allowlist.
+
+---
+
+## Python pipeline
+
+A supporting Python pipeline generates the synthetic corpus and loads it into Aura. It is **not** deployed to Vercel — it lives alongside the web app for reproducibility.
+
+- `src/` — corpus generator, graph loader, enricher, embedder
+- `aura/schema.cypher` — constraints, indexes, and vector index bootstrap
+- `aura/cypher_templates/*.json` — the whitelist consumed at runtime by the web app
+- `Makefile` — common targets (generate, load, enrich, embed)
+- `requirements.txt` — Python deps
+
+See [`docs/`](docs/) for research and design notes (domain model, schema decisions, tool selection rationale).
+
+---
+
+## Deploy
+
+See [`DEPLOY.md`](DEPLOY.md) for the Vercel operator cheatsheet (first-time link, env vars, rollback).
+
+---
 
 ## License
 
-MIT.
+MIT — see [`LICENSE`](LICENSE).
+
+## Credits
+
+Built for the Neo4j Aura Agents & Context Building Hackathon 2026.
