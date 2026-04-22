@@ -1,0 +1,37 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+dist/
+build/
+
+# Environment
+.env
+.env.*
+!.env.example
+
+# Virtual envs
+venv/
+.venv/
+
+# Generated synthetic data (regenerate via src/generate_corpus.py)
+data/synthetic/generated/
+data/synthetic/*.jsonl
+data/synthetic/*.md
+
+# Caches
+data/embeddings_cache/
+data/eval/reports/
+.pytest_cache/
+
+# IDE / OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# Claude Code
+.claude/
+
+# Screenshots from demo (keep only curated)
+website/screenshots_raw/
