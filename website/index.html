@@ -1,0 +1,250 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>AeroScope - An aerospace requirements traceability agent on Neo4j Aura</title>
+<meta name="description" content="AeroScope is a Neo4j Aura agent that walks a graph of aerospace requirements to answer impact-analysis, compliance, and coverage questions a document store cannot.">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<a class="skip-link" href="#main">Skip to main content</a>
+
+<header class="hero" role="banner">
+  <svg class="hero-bg" aria-hidden="true" focusable="false" viewBox="0 0 1200 700" preserveAspectRatio="xMidYMid slice">
+    <g fill="none" stroke="#3a4a6b" stroke-width="1" opacity="0.55">
+      <line x1="140" y1="120" x2="340" y2="260"/>
+      <line x1="340" y1="260" x2="560" y2="180"/>
+      <line x1="340" y1="260" x2="420" y2="470"/>
+      <line x1="560" y1="180" x2="780" y2="300"/>
+      <line x1="780" y1="300" x2="980" y2="200"/>
+      <line x1="780" y1="300" x2="860" y2="520"/>
+      <line x1="420" y1="470" x2="620" y2="560"/>
+      <line x1="620" y1="560" x2="860" y2="520"/>
+      <line x1="980" y1="200" x2="1080" y2="400"/>
+      <line x1="1080" y1="400" x2="860" y2="520"/>
+      <line x1="220" y1="540" x2="420" y2="470"/>
+      <line x1="220" y1="540" x2="140" y2="120"/>
+    </g>
+    <g fill="#5aa9c9">
+      <circle cx="140" cy="120" r="4"/>
+      <circle cx="340" cy="260" r="5"/>
+      <circle cx="560" cy="180" r="4"/>
+      <circle cx="420" cy="470" r="4"/>
+      <circle cx="780" cy="300" r="6"/>
+      <circle cx="980" cy="200" r="4"/>
+      <circle cx="860" cy="520" r="5"/>
+      <circle cx="620" cy="560" r="4"/>
+      <circle cx="1080" cy="400" r="4"/>
+      <circle cx="220" cy="540" r="4"/>
+    </g>
+    <g fill="#ff8a3d">
+      <circle cx="780" cy="300" r="9" opacity="0.35"/>
+      <circle cx="420" cy="470" r="7" opacity="0.35"/>
+    </g>
+  </svg>
+
+  <div class="container hero-inner">
+    <span class="badge" aria-label="Submission status">Built on Neo4j Aura Agent - Hackathon 2026 submission</span>
+    <h1>AeroScope</h1>
+    <p class="subtitle">An aerospace requirements traceability agent on Neo4j Aura.</p>
+    <p class="pitch">Ask in plain English what breaks if you change a single requirement - the agent walks the graph, names each trace hop, and cites the standards at risk.</p>
+    <div class="ctas">
+      <!-- TODO: swap href with the real Aura Agent public link after Wave 4 publication -->
+      <a class="btn primary" href="#" aria-label="Try the AeroScope agent (link coming after publication)">Try the agent</a>
+      <a class="btn secondary" href="https://github.com/mftnakrsu/aeroscope-neo4j-hackathon" rel="noopener">View on GitHub</a>
+    </div>
+  </div>
+</header>
+
+<main id="main">
+
+<section class="section" aria-labelledby="what-it-does">
+  <div class="container narrow">
+    <h2 id="what-it-does">What it does</h2>
+    <p>AeroScope is a requirements-engineering agent for the systems engineer who just got a change request at 4pm and has to answer <em>"what else does this break?"</em> before standup tomorrow. Instead of paging through a thousand requirements in IBM DOORS, the engineer asks in plain English and gets a traced, cited answer: upstream stakeholder needs, downstream test procedures, the standards clauses at risk, and the implicit dependencies nobody wrote down.</p>
+    <p>It is not RAG over PDFs. It is an agent that walks a graph of engineering intent, names its trace path, and explains its reasoning, one hop at a time.</p>
+  </div>
+</section>
+
+<section class="section alt" aria-labelledby="live-demo">
+  <div class="container">
+    <h2 id="live-demo">Live demo</h2>
+    <p class="lede">Three questions from the <a href="https://github.com/mftnakrsu/aeroscope-neo4j-hackathon/blob/main/demo/demo_queries.md" rel="noopener">curated demo set</a>. Click any card to see the Cypher under the hood.</p>
+
+    <article class="demo-card" tabindex="0" role="button" aria-expanded="false" aria-controls="demo1-body">
+      <header class="demo-head">
+        <span class="demo-tag">Impact analysis</span>
+        <span class="demo-tool">Cypher Template</span>
+      </header>
+      <h3 class="demo-q">If we raise the 28V DC bus undervoltage threshold on Stratos-7 from 22 V to 24 V, which requirements are affected, which tests must rerun, and what standards could we fall out of compliance with?</h3>
+      <p class="demo-a"><strong>Answer.</strong> Pivots on the 28V threshold clause, fans out through <code>DERIVES_FROM</code>, <code>SATISFIES</code>, <code>REFINES</code>, and LLM-discovered <code>SEMANTICALLY_DEPENDS_ON</code> / <code>CONSTRAINS</code> edges up to three hops, then joins on <code>VERIFIED_BY</code> test procedures and <code>REFERENCES_STANDARD</code> clauses. Returns affected requirements with the exact chain of edge types, a deduplicated rerun-test list, and the standards (DO-178C, ARP4754A, MIL-STD-1553B) whose compliance evidence the change invalidates.</p>
+      <button class="demo-toggle" type="button" aria-expanded="false" aria-controls="demo1-body">Under the hood <span class="chev" aria-hidden="true">+</span></button>
+      <div class="demo-body" id="demo1-body" hidden>
+<pre><code>MATCH (anchor:Requirement)
+WHERE anchor.full_text =~ '(?i).*28\s*V.*undervoltage.*'
+  AND (anchor)-[:ALLOCATED_TO]-&gt;(:Platform {name: 'Stratos-7'})
+CALL {
+  WITH anchor
+  MATCH path = (anchor)&lt;-[:DERIVES_FROM|SATISFIES|REFINES
+    |SEMANTICALLY_DEPENDS_ON|CONSTRAINS*1..3]-(dependent:Requirement)
+  RETURN dependent, [r IN relationships(path) | type(r)] AS chain
+}
+OPTIONAL MATCH (dependent)-[:VERIFIED_BY]-&gt;(t:TestProcedure)
+OPTIONAL MATCH (dependent)-[:REFERENCES_STANDARD]-&gt;(s:Standard)
+RETURN dependent.id, dependent.heading, chain,
+       collect(DISTINCT t.name) AS tests_to_rerun,
+       collect(DISTINCT s.name) AS standards_at_risk
+ORDER BY size(chain) ASC;</code></pre>
+      </div>
+    </article>
+
+    <article class="demo-card" tabindex="0" role="button" aria-expanded="false" aria-controls="demo2-body">
+      <header class="demo-head">
+        <span class="demo-tag">Compliance</span>
+        <span class="demo-tool">Cypher Template</span>
+      </header>
+      <h3 class="demo-q">List every requirement that references DO-178C at Design Assurance Level B, grouped by module, and tell me which ones do not yet have a linked verification procedure.</h3>
+      <p class="demo-a"><strong>Answer.</strong> Module-grouped DAL-B scope list with each row marked as either a verification procedure name or an explicit <code>GAP</code>. A summary header reports total in scope, total covered, and coverage percentage. Gaps float to the top of each module so a DER's eye lands on them first - the exact evidence pack asked for at a Stage-of-Involvement audit.</p>
+      <button class="demo-toggle" type="button" aria-expanded="false" aria-controls="demo2-body">Under the hood <span class="chev" aria-hidden="true">+</span></button>
+      <div class="demo-body" id="demo2-body" hidden>
+<pre><code>MATCH (r:Requirement)-[ref:REFERENCES_STANDARD]-&gt;(s:Standard {name: 'DO-178C'})
+WHERE ref.dal = 'B' OR r.dal = 'B'
+OPTIONAL MATCH (r)-[:VERIFIED_BY]-&gt;(t:TestProcedure)
+RETURN r.module,
+       r.id,
+       r.heading,
+       CASE WHEN t IS NULL THEN 'GAP' ELSE t.name END AS verification_status
+ORDER BY r.module, verification_status DESC, r.id;</code></pre>
+      </div>
+    </article>
+
+    <article class="demo-card" tabindex="0" role="button" aria-expanded="false" aria-controls="demo3-body">
+      <header class="demo-head">
+        <span class="demo-tag">Semantic search</span>
+        <span class="demo-tool">Similarity Search</span>
+      </header>
+      <h3 class="demo-q">Find me other requirements across the fleet that describe the same behaviour as REQ-FCC-118 (pitch-rate limiter during recovery), even if they are written in different words or live in different modules.</h3>
+      <p class="demo-a"><strong>Answer.</strong> Top-K cosine similarity on the 1536-dim embedding index, enriched with graph context: each candidate is annotated with platform allocation and a boolean <code>already_linked</code> flag showing whether the pair is connected by any relationship. An action column suggests merge, add an explicit <code>REFINES</code> edge, or leave as a legitimate parallel implementation.</p>
+      <button class="demo-toggle" type="button" aria-expanded="false" aria-controls="demo3-body">Under the hood <span class="chev" aria-hidden="true">+</span></button>
+      <div class="demo-body" id="demo3-body" hidden>
+<pre><code>MATCH (anchor:Requirement {id: 'REQ-FCC-118'})
+CALL db.index.vector.queryNodes('requirement_embeddings', 15, anchor.embedding)
+YIELD node AS candidate, score
+WHERE candidate.id &lt;&gt; anchor.id
+
+OPTIONAL MATCH (candidate)-[:ALLOCATED_TO]-&gt;(p:Platform)
+OPTIONAL MATCH (candidate)-[:DERIVES_FROM|SATISFIES
+  |SEMANTICALLY_DEPENDS_ON]-(anchor)
+RETURN candidate.id, candidate.module, candidate.heading, score,
+       collect(DISTINCT p.name) AS platforms,
+       exists((candidate)--(anchor)) AS already_linked;</code></pre>
+      </div>
+    </article>
+
+    <!-- TODO: add Aura console screenshot + demo clip URLs here after Wave 4 -->
+  </div>
+</section>
+
+<section class="section" aria-labelledby="why-graph">
+  <div class="container narrow">
+    <h2 id="why-graph">Why a graph</h2>
+    <ul class="why-list">
+      <li><strong>Relationships are the data.</strong> Take away <code>SATISFIES</code>, <code>DERIVES_FROM</code>, <code>VERIFIES</code>, <code>REFERENCES_STANDARD</code>, <code>ALLOCATED_TO</code> and you are left with a thousand disconnected sentences.</li>
+      <li><strong>Explain why, not just what.</strong> The trace path itself, serialised into English, is the explanation - the engineer defends the answer without trusting the LLM.</li>
+      <li><strong>LLM-discovered implicit edges.</strong> <code>SEMANTICALLY_DEPENDS_ON</code>, <code>COMPLEMENTS</code>, <code>CONSTRAINS</code>, <code>POTENTIALLY_CONFLICTS</code> surface dependencies that are real in the system but were never written into a formal trace link - the gap plain-text search cannot cross.</li>
+    </ul>
+  </div>
+</section>
+
+<section class="section alt" aria-labelledby="tech">
+  <div class="container narrow">
+    <h2 id="tech">The tech</h2>
+    <table class="tech-table">
+      <thead>
+        <tr><th scope="col">Layer</th><th scope="col">Choice</th></tr>
+      </thead>
+      <tbody>
+        <tr><th scope="row">Graph</th><td>Neo4j Aura Free</td></tr>
+        <tr><th scope="row">Agent</th><td>Neo4j Aura Agent (Gemini Flash 2.5)</td></tr>
+        <tr><th scope="row">Embeddings</th><td>OpenAI text-embedding-3-small (1536d)</td></tr>
+        <tr><th scope="row">Data prep</th><td>Python pipeline - ~1000 synthetic requirements</td></tr>
+        <tr><th scope="row">Published via</th><td>Aura Agent External Access + MCP</td></tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<section class="section" aria-labelledby="how-to-build">
+  <div class="container narrow">
+    <h2 id="how-to-build">How to build your own</h2>
+    <ol class="steps">
+      <li><strong>Generate the corpus.</strong> Produce ~1000 synthetic requirements in the IBM DOORS 9.7 MD export format - the same shape the pipeline accepts for real industry data.</li>
+      <li><strong>Load into Neo4j Aura.</strong> Parse to JSONL, build nodes and trace edges, extract entities (Standards, Interfaces, Components, Platforms), and auto-link cross-references.</li>
+      <li><strong>Enrich.</strong> Compute 1536-dim embeddings, generate one-line summaries, and run an offline LLM pass that discovers implicit <code>SEMANTICALLY_DEPENDS_ON</code> / <code>COMPLEMENTS</code> / <code>CONSTRAINS</code> / <code>POTENTIALLY_CONFLICTS</code> edges.</li>
+      <li><strong>Wire up the agent.</strong> In the Aura Agent console, bind three tools - Cypher Template, Text2Cypher, Similarity Search - to the populated database, expose it via External Access or MCP, and ask away.</li>
+    </ol>
+    <p class="inline-cta"><a href="https://github.com/mftnakrsu/aeroscope-neo4j-hackathon#readme" rel="noopener">Full walkthrough in the GitHub README -&gt;</a></p>
+  </div>
+</section>
+
+</main>
+
+<footer class="site-footer" role="contentinfo">
+  <div class="container footer-inner">
+    <p>Built by <a href="mailto:meftunakrsu@gmail.com">Meftun Akarsu</a> for the Neo4j Aura Agents &amp; Context Building Hackathon 2026.</p>
+    <p class="badge-row">
+      <span class="neo-badge" aria-label="Built with Neo4j Aura">
+        <span class="neo-dot" aria-hidden="true"></span>
+        Built with Neo4j Aura
+      </span>
+    </p>
+  </div>
+</footer>
+
+<script>
+(function () {
+  var cards = document.querySelectorAll('.demo-card');
+  cards.forEach(function (card) {
+    var btn = card.querySelector('.demo-toggle');
+    var body = card.querySelector('.demo-body');
+    var chev = card.querySelector('.chev');
+    if (!btn || !body) return;
+
+    function toggle() {
+      var open = body.hasAttribute('hidden') === false;
+      if (open) {
+        body.setAttribute('hidden', '');
+        card.setAttribute('aria-expanded', 'false');
+        btn.setAttribute('aria-expanded', 'false');
+        if (chev) chev.textContent = '+';
+      } else {
+        body.removeAttribute('hidden');
+        card.setAttribute('aria-expanded', 'true');
+        btn.setAttribute('aria-expanded', 'true');
+        if (chev) chev.textContent = '-';
+      }
+    }
+
+    btn.addEventListener('click', function (e) { e.stopPropagation(); toggle(); });
+
+    card.addEventListener('click', function (e) {
+      if (e.target.closest('a, pre, code')) return;
+      if (e.target === btn) return;
+      toggle();
+    });
+
+    card.addEventListener('keydown', function (e) {
+      if (e.target !== card) return;
+      if (e.key === 'Enter' || e.key === ' ') {
+        e.preventDefault();
+        toggle();
+      }
+    });
+  });
+})();
+</script>
+
+</body>
+</html>

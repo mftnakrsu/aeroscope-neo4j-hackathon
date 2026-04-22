@@ -1,0 +1,16 @@
+{
+  "name": "platform_requirements",
+  "description": "Returns every requirement allocated to a given platform, grouped by module and annotated with classification, DAL, and whether it is verified. Works via the two-hop pattern (:Platform)<-[:PART_OF]-(:Module)-[:CONTAINS]->(:Requirement) plus a direct (:Requirement)-[:ALLOCATED_TO]->(:Platform) match, so it catches both module-level allocation and explicit per-requirement allocation without double-counting. Results are module-grouped so an engineer sees the platform's responsibility surface organised the way the DOORS tree is organised.",
+  "when_to_use": "Fire this template when the user asks for the requirements associated with a specific platform. Typical phrasings: 'all requirements allocated to Stratos-7', 'what is on AeroLynx-X2', 'Skyrunner-T1 requirement set', 'show me everything for Nimbus-C3'. The user must name exactly one platform. For cross-platform comparisons use Text2Cypher.",
+  "parameters": [
+    {
+      "name": "platform_name",
+      "description": "The Platform.name. Must be one of the four fictional platforms: 'Stratos-7', 'AeroLynx-X2', 'Skyrunner-T1', 'Nimbus-C3'. Preserve the hyphenation and casing exactly.",
+      "required": true,
+      "type": "string"
+    }
+  ],
+  "cypher": "MATCH (p:Platform {name: $platform_name})\nOPTIONAL MATCH (p)<-[:ALLOCATED_TO]-(r1:Requirement)\nOPTIONAL MATCH (p)<-[:PART_OF]-(m:Module)-[:CONTAINS]->(r2:Requirement)\nWITH p, collect(DISTINCT r1) + collect(DISTINCT r2) AS all_reqs\nUNWIND all_reqs AS r\nWITH DISTINCT p, r\nWHERE r IS NOT NULL\nOPTIONAL MATCH (r)-[:VERIFIED_BY]->(t:TestProcedure)\nWITH p, r, count(DISTINCT t) AS test_count\nRETURN DISTINCT\n       p.name                         AS platform,\n       r.module                       AS module,\n       r.id                           AS requirement_id,\n       r.heading                      AS heading,\n       r.summary                      AS summary,\n       r.classification               AS classification,\n       r.safety_classification        AS dal,\n       CASE WHEN test_count > 0 THEN 'COVERED' ELSE 'GAP' END AS verification_status\nORDER BY module, requirement_id",
+  "limit": 50,
+  "notes": "Allocation is captured two ways in AeroScope: explicitly via Requirement-[:ALLOCATED_TO]->Platform (fine-grained per-requirement assignment) and structurally via Module-[:PART_OF]->Platform (a shared module ships with every platform it belongs to). This template unions both, then DISTINCT-deduplicates, so requirements picked up by either mechanism are counted exactly once. The verification_status column makes this template composable with a follow-up orphan_requirements call when the user drills into gaps."
+}

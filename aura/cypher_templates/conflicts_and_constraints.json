@@ -1,0 +1,16 @@
+{
+  "name": "conflicts_and_constraints",
+  "description": "Surfaces both human-authored conflicts (CONFLICTS_WITH) and LLM-flagged potential conflicts (POTENTIALLY_CONFLICTS) for a given module, plus any cross-requirement constraints (CONSTRAINS) that touch the module. Each row indicates the two requirements in the pair, the relationship type, the provenance (explicit versus LLM-inferred), the LLM confidence score and stored rationale where available, and whether the pair is already formally documented as a conflict. This is the canonical query for hidden-conflict detection: a POTENTIALLY_CONFLICTS pair without a matching CONFLICTS_WITH edge is a risk that has not yet been triaged.",
+  "when_to_use": "Fire this template when the user asks about conflicts, constraints, or contradictions involving a specific module. Typical phrasings: 'show conflicts in PWR', 'what might conflict with FCC requirements', 'constraints on INS', 'hidden conflicts in COMM', 'potential contradictions in the NAV module'. The user must name one module. For cross-module conflict hunts across two specific modules, prefer cross_module_refs with an edge-type filter by the calling agent.",
+  "parameters": [
+    {
+      "name": "module",
+      "description": "The Module.name whose conflict and constraint edges we want. Example values: 'PWR', 'FCC', 'INS', 'COMM', 'NAV'. Use the exact uppercase module code.",
+      "required": true,
+      "type": "string"
+    }
+  ],
+  "cypher": "MATCH (a:Requirement)-[rel:CONFLICTS_WITH|POTENTIALLY_CONFLICTS|CONSTRAINS]-(b:Requirement)\nWHERE a.module = $module OR b.module = $module\nWITH a, b, rel,\n     EXISTS { MATCH (a)-[:CONFLICTS_WITH]-(b) } AS formally_documented\nRETURN DISTINCT\n       a.id                                        AS requirement_a,\n       a.module                                    AS module_a,\n       a.heading                                   AS heading_a,\n       b.id                                        AS requirement_b,\n       b.module                                    AS module_b,\n       b.heading                                   AS heading_b,\n       type(rel)                                   AS relationship,\n       coalesce(rel.discovery_method, 'explicit')  AS provenance,\n       rel.confidence                              AS llm_confidence,\n       rel.rationale                               AS llm_rationale,\n       formally_documented,\n       CASE WHEN type(rel) = 'POTENTIALLY_CONFLICTS' AND NOT formally_documented\n            THEN 'UNTRIAGED'\n            ELSE 'KNOWN'\n       END                                         AS status\nORDER BY status, provenance DESC, llm_confidence DESC",
+  "limit": 50,
+  "notes": "The EXISTS sub-match checks whether a pair already has a formal CONFLICTS_WITH edge, so the agent can distinguish LLM-suggested conflicts that humans have already reviewed from those still awaiting triage. UNTRIAGED rows sort first so the reader's eye lands on the unreviewed risks. Confidence and rationale are populated only on LLM-discovered edges (discovery_method='llm_implicit'); for human-authored conflicts those columns are null and the agent should render them as blank."
+}

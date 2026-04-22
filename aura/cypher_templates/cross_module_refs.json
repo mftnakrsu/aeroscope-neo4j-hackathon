@@ -1,0 +1,22 @@
+{
+  "name": "cross_module_refs",
+  "description": "Finds all requirements in one module that reference, depend on, or trace into requirements in another module. Covers both explicit edges (SATISFIES, DERIVES_FROM, REFINES, VERIFIES, CONFLICTS_WITH) and LLM-discovered ones (SEMANTICALLY_DEPENDS_ON, COMPLEMENTS, CONSTRAINS, POTENTIALLY_CONFLICTS), with the edge provenance surfaced per row. This is the canonical shape for 'how does FCC talk to PWR' interface-boundary questions, and the result is the exact list an integration engineer needs when redrawing a module boundary.",
+  "when_to_use": "Fire this template when the user asks about connections between two specific modules. Typical phrasings: 'show all requirements in FCC that reference PWR', 'cross-module links between INS and NAV', 'what does CDL depend on in COMM', 'FCC to PWR boundary'. The user must name both a source module and a target module. Do not fire when the user is asking about a single module — use module_coverage or platform_requirements instead.",
+  "parameters": [
+    {
+      "name": "module_a",
+      "description": "The source Module.name. Requirements from this module will appear on the left of each result row. Example values: 'FCC', 'INS', 'CDL'. Use the exact uppercase module code.",
+      "required": true,
+      "type": "string"
+    },
+    {
+      "name": "module_b",
+      "description": "The target Module.name. Requirements from this module will appear on the right of each result row. Example values: 'PWR', 'NAV', 'COMM'. Use the exact uppercase module code.",
+      "required": true,
+      "type": "string"
+    }
+  ],
+  "cypher": "MATCH (a:Requirement)-[rel:SATISFIES|DERIVES_FROM|REFINES|VERIFIES|CONFLICTS_WITH|SEMANTICALLY_DEPENDS_ON|COMPLEMENTS|CONSTRAINS|POTENTIALLY_CONFLICTS]-(b:Requirement)\nWHERE a.module = $module_a\n  AND b.module = $module_b\nRETURN DISTINCT\n       a.id                                        AS source_id,\n       a.heading                                   AS source_heading,\n       a.summary                                   AS source_summary,\n       type(rel)                                   AS relationship,\n       coalesce(rel.discovery_method, 'explicit')  AS provenance,\n       rel.confidence                              AS llm_confidence,\n       b.id                                        AS target_id,\n       b.heading                                   AS target_heading,\n       b.summary                                   AS target_summary\nORDER BY provenance, source_id, target_id",
+  "limit": 50,
+  "notes": "The match pattern is undirected (no arrow) so it catches edges in both orientations — an FCC requirement that SATISFIES a PWR one and a PWR requirement that CONSTRAINS an FCC one both appear, with the source/target columns oriented to the user's query. Ordering by provenance puts explicit edges before LLM-discovered ones so the reader sees the auditable links first. Confidence column is only populated on LLM edges; it is null for explicit ones, which is what the agent should render as a blank cell."
+}

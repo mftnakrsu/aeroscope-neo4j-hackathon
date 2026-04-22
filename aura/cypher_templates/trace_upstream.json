@@ -1,0 +1,16 @@
+{
+  "name": "trace_upstream",
+  "description": "Given a requirement id, returns the upstream parents it derives from — up to three hops of DERIVES_FROM, SATISFIES, and REFINES — so an engineer can see which higher-level needs or stakeholder asks ultimately justify the leaf requirement. Also surfaces the authoring stakeholder when one is recorded, because the top of an upstream trace is usually a stakeholder need. Each row includes the parent's module, heading, one-line summary, and the exact chain of relationship types taken to reach it.",
+  "when_to_use": "Fire this template when the user asks which higher-level requirements a specific requirement traces up to. Typical phrasings: 'what stakeholder needs does FCC-042 trace up to', 'show me the parents of REQ-INS-019', 'why does this requirement exist', 'upstream trace for STR7-NAV-014', 'what drove this requirement'. The user must give one requirement id. For downstream traversal (children / tests), use trace_downstream instead.",
+  "parameters": [
+    {
+      "name": "req_id",
+      "description": "The Requirement.id of the leaf whose upstream ancestors we want. Example values: 'FCC-042', 'REQ-INS-019', 'STR7-NAV-014'. Extract verbatim from the user's question.",
+      "required": true,
+      "type": "string"
+    }
+  ],
+  "cypher": "MATCH (leaf:Requirement {id: $req_id})\nOPTIONAL MATCH path = (leaf)-[rels:DERIVES_FROM|SATISFIES|REFINES*1..3]->(parent:Requirement)\nWITH leaf, parent, path,\n     [r IN relationships(path) | type(r)] AS chain,\n     length(path) AS hop_count\nOPTIONAL MATCH (author:Stakeholder)-[:AUTHORED]->(parent)\nRETURN DISTINCT\n       leaf.id          AS leaf_id,\n       leaf.heading     AS leaf_heading,\n       parent.id        AS parent_id,\n       parent.module    AS parent_module,\n       parent.heading   AS parent_heading,\n       parent.summary   AS parent_summary,\n       chain,\n       hop_count,\n       collect(DISTINCT author.name) AS authored_by\nORDER BY hop_count ASC, parent_module, parent_id",
+  "limit": 50,
+  "notes": "Walks outgoing DERIVES_FROM, SATISFIES, and REFINES — these are the three trace edges that point 'up' in the AeroScope schema. Three-hop cap balances coverage (most parents surface within two hops) against performance on Aura Free. When the leaf has no upstream edges the result set is empty, which the agent should report as 'orphan with no parents' rather than an error. Stakeholder authorship is optional — older ingestion runs may lack AUTHORED edges."
+}

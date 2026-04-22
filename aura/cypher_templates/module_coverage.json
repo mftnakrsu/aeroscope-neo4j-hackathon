@@ -1,0 +1,16 @@
+{
+  "name": "module_coverage",
+  "description": "Aggregates verification coverage for a single module. Returns one row of rollup statistics — total requirements in the module, how many have at least one VERIFIED_BY edge, how many have none, and the resulting coverage percentage — so an engineer or auditor can see at a glance how close the module is to full verification. Also counts how many of the uncovered requirements are classified as safety-critical, which is the figure that matters most for a DO-178C audit.",
+  "when_to_use": "Fire this template when the user asks for coverage stats about one specific module. Typical phrasings: 'how many requirements in FCC have verifications', 'what is the coverage of the PWR module', 'verification coverage for module INS', 'module coverage on CDL'. The user must name a module. For per-requirement gap lists (not just counts), pair with orphan_requirements.",
+  "parameters": [
+    {
+      "name": "module",
+      "description": "The Module.name whose verification coverage we want. Example values: 'FCC', 'PWR', 'INS', 'CDL', 'COMM', 'NAV'. Use the exact uppercase module code as it appears in the DOORS export.",
+      "required": true,
+      "type": "string"
+    }
+  ],
+  "cypher": "MATCH (m:Module {name: $module})-[:CONTAINS]->(r:Requirement)\nWITH m, collect(r) AS reqs\nUNWIND reqs AS r\nOPTIONAL MATCH (r)-[:VERIFIED_BY]->(t:TestProcedure)\nWITH m, r, count(DISTINCT t) AS test_count\nWITH m,\n     count(r)                                                    AS total_requirements,\n     sum(CASE WHEN test_count > 0 THEN 1 ELSE 0 END)             AS verified_requirements,\n     sum(CASE WHEN test_count = 0 THEN 1 ELSE 0 END)             AS uncovered_requirements,\n     sum(CASE WHEN test_count = 0\n                AND r.safety_classification IN ['A','B','DAL-A','DAL-B']\n              THEN 1 ELSE 0 END)                                 AS uncovered_safety_critical\nRETURN m.name                                                    AS module,\n       total_requirements,\n       verified_requirements,\n       uncovered_requirements,\n       uncovered_safety_critical,\n       CASE WHEN total_requirements = 0 THEN 0.0\n            ELSE round(100.0 * verified_requirements / total_requirements, 1)\n       END                                                       AS coverage_percent",
+  "limit": 1,
+  "notes": "Returns exactly one row per invocation — a rollup over the whole module — so the limit is set to 1. Safety-critical uncovered count accepts both DAL-style values ('A'/'B') and prefixed forms ('DAL-A'/'DAL-B') because the corpus has historically stored both. Module names are case-sensitive on :Module.name; agents should preserve the user's capitalisation and only fall back to a case-insensitive match via Text2Cypher if this template returns zero rows."
+}

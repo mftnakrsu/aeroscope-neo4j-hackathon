@@ -1,0 +1,16 @@
+{
+  "name": "orphan_requirements",
+  "description": "Finds safety-critical requirements that have no verification coverage — no VERIFIED_BY edge to any TestProcedure and no inverse VERIFIES edge from any other requirement. Filtered by DAL so an auditor can focus on the critical tier (A or B). For each orphan the query also looks two hops up the trace (DERIVES_FROM, SATISFIES) to see whether a parent requirement does have coverage; if so, the orphan is a trace-link hygiene issue rather than a true hole, and the inherited test list is returned alongside so the engineer can triage the two buckets.",
+  "when_to_use": "Fire this template when the user asks about requirements missing tests or verification. Typical phrasings: 'which DAL-A and DAL-B requirements have no test procedure', 'list orphan safety-critical requirements', 'verification gaps at DAL-B', 'uncovered safety requirements', 'requirements with no tests'. The user must specify a DAL level; if ambiguous, default to 'A' which is the highest-stakes tier.",
+  "parameters": [
+    {
+      "name": "dal_level",
+      "description": "The Design Assurance Level to audit. Accepts 'A', 'B', 'C', 'D', 'E'. Also accepts prefixed forms like 'DAL-A' — both are normalised inside the query. Default to 'A' if the user says 'safety-critical' without specifying.",
+      "required": true,
+      "type": "string"
+    }
+  ],
+  "cypher": "WITH CASE WHEN $dal_level STARTS WITH 'DAL-' THEN substring($dal_level, 4) ELSE $dal_level END AS dal_bare,\n     CASE WHEN $dal_level STARTS WITH 'DAL-' THEN $dal_level ELSE 'DAL-' + $dal_level END AS dal_prefixed\nMATCH (r:Requirement)\nWHERE (r.safety_classification = dal_bare OR r.safety_classification = dal_prefixed)\n  AND NOT (r)-[:VERIFIED_BY]->(:TestProcedure)\n  AND NOT (r)<-[:VERIFIES]-(:Requirement)\nOPTIONAL MATCH (r)-[:ALLOCATED_TO]->(p:Platform)\nOPTIONAL MATCH (r)-[:DERIVES_FROM|SATISFIES*1..2]->(parent:Requirement)-[:VERIFIED_BY]->(inherited:TestProcedure)\nRETURN DISTINCT\n       r.id                                   AS requirement_id,\n       r.module                               AS module,\n       r.heading                              AS heading,\n       r.summary                              AS summary,\n       r.safety_classification                AS dal,\n       collect(DISTINCT p.name)               AS platforms,\n       collect(DISTINCT inherited.id)         AS inherited_tests,\n       CASE WHEN size(collect(DISTINCT inherited.id)) > 0\n            THEN 'HYGIENE_GAP'\n            ELSE 'TRUE_GAP'\n       END                                    AS gap_type\nORDER BY gap_type, module, requirement_id",
+  "limit": 50,
+  "notes": "The DAL normalisation handles both bare ('A') and prefixed ('DAL-A') storage conventions because earlier ingestion scripts were inconsistent. The gap_type column is the unique value of this template versus a plain negation query: TRUE_GAP means the requirement has no tested parent either (a real certification problem), HYGIENE_GAP means a parent is tested and the engineer probably just forgot to add a VERIFIED_BY edge from the child. Returns an empty list on a well-covered corpus — that is a pass, not a failure."
+}

@@ -1,0 +1,16 @@
+{
+  "name": "trace_downstream",
+  "description": "Given a requirement id, returns the downstream children that refine it and the test procedures that verify it or any of its children — up to three hops of REFINES/SATISFIES, plus a final VERIFIED_BY edge to TestProcedure. This is the canonical shape for DO-178C style downward trace matrices: from a high-level requirement, which leaves implement it, and which tests demonstrate compliance. Each row includes the child requirement, the chain of trace types, and any linked test procedures with their coverage flag.",
+  "when_to_use": "Fire this template when the user asks what implements or verifies a given requirement. Typical phrasings: 'which tests verify FCC-042 and its children', 'downstream trace for REQ-PWR-017', 'what refines STR7-COMM-008', 'show me the children and tests of X', 'how is this requirement verified'. The user must give one requirement id. For upstream parents, use trace_upstream instead.",
+  "parameters": [
+    {
+      "name": "req_id",
+      "description": "The Requirement.id of the parent whose downstream children and verification tests we want. Example values: 'FCC-042', 'REQ-PWR-017', 'STR7-COMM-008'. Extract verbatim from the user's question.",
+      "required": true,
+      "type": "string"
+    }
+  ],
+  "cypher": "MATCH (parent:Requirement {id: $req_id})\nOPTIONAL MATCH path = (child:Requirement)-[rels:REFINES|SATISFIES*0..3]->(parent)\nWITH parent, child, path,\n     [r IN relationships(path) | type(r)] AS chain,\n     length(path) AS hop_count\nOPTIONAL MATCH (child)-[v:VERIFIED_BY]->(t:TestProcedure)\nRETURN DISTINCT\n       parent.id        AS parent_id,\n       parent.heading   AS parent_heading,\n       child.id         AS child_id,\n       child.module     AS child_module,\n       child.heading    AS child_heading,\n       child.summary    AS child_summary,\n       chain,\n       hop_count,\n       collect(DISTINCT t.id)         AS test_ids,\n       collect(DISTINCT t.title)      AS test_titles,\n       collect(DISTINCT v.coverage)   AS coverage_flags\nORDER BY hop_count ASC, child_module, child_id",
+  "limit": 50,
+  "notes": "Traverses incoming REFINES and SATISFIES edges with a range of 0..3 hops so the parent itself is included in the first row (zero-hop case) — that way the agent sees whether the parent is directly verified even when it has no children. Coverage flag comes from the VERIFIED_BY relationship property; 'full' versus 'partial' lets the agent report evidence quality. An empty test_ids column on a safety-critical child is the signal for orphan_requirements follow-up."
+}

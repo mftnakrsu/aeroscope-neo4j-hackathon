@@ -1,0 +1,16 @@
+{
+  "name": "impact_analysis",
+  "description": "For a given requirement ID, lists everything that could break if the requirement is modified. Walks one-to-two hops along the downstream trace edges (SATISFIES, DERIVES_FROM, REFINES, VERIFIES) and also returns LLM-discovered semantic dependencies (SEMANTICALLY_DEPENDS_ON, CONSTRAINS) plus any hard conflicts. Each row shows the dependent requirement, the exact chain of relationship types used to reach it, whether the hop was explicit or LLM-inferred, and the tests/standards at risk, so a change-control board can estimate blast radius without hand-tracing the graph.",
+  "when_to_use": "Fire this template when the user asks about the consequences of changing or removing one specific requirement. Typical phrasings: 'what breaks if I change FCC-042', 'impact of modifying REQ-PWR-017', 'who depends on STR7-NAV-014', 'change risk for requirement X', 'if we raise the undervoltage threshold on Stratos-7, what is affected'. The user must provide a single requirement id. Do not use this template for open-ended 'related to' questions — route those to Similarity Search instead.",
+  "parameters": [
+    {
+      "name": "req_id",
+      "description": "The Requirement.id of the anchor whose blast radius we want to compute. Example values: 'FCC-042', 'REQ-PWR-017', 'STR7-NAV-014'. Extract verbatim from the user's question and preserve case.",
+      "required": true,
+      "type": "string"
+    }
+  ],
+  "cypher": "MATCH (anchor:Requirement {id: $req_id})\nOPTIONAL MATCH path = (anchor)<-[rels:SATISFIES|DERIVES_FROM|REFINES|VERIFIES|SEMANTICALLY_DEPENDS_ON|CONSTRAINS|POTENTIALLY_CONFLICTS|CONFLICTS_WITH*1..2]-(dependent:Requirement)\nWITH anchor, dependent, path,\n     [r IN relationships(path) | type(r)] AS chain,\n     [r IN relationships(path) | coalesce(r.discovery_method, 'explicit')] AS provenance,\n     length(path) AS hop_count\nOPTIONAL MATCH (dependent)-[:VERIFIED_BY]->(t:TestProcedure)\nOPTIONAL MATCH (dependent)-[:REFERENCES_STANDARD]->(s:Standard)\nRETURN DISTINCT\n       anchor.id          AS anchor_id,\n       anchor.heading     AS anchor_heading,\n       dependent.id       AS dependent_id,\n       dependent.heading  AS dependent_heading,\n       dependent.module   AS dependent_module,\n       dependent.summary  AS dependent_summary,\n       chain,\n       provenance,\n       hop_count,\n       collect(DISTINCT t.id)   AS tests_to_rerun,\n       collect(DISTINCT s.name) AS standards_at_risk\nORDER BY hop_count ASC, dependent_module, dependent_id",
+  "limit": 50,
+  "notes": "Bounded to two hops so Aura Free plans execute in well under a second on a 1000-requirement corpus. Explicit trace edges (SATISFIES, DERIVES_FROM, REFINES, VERIFIES, CONFLICTS_WITH) and LLM-discovered edges (SEMANTICALLY_DEPENDS_ON, CONSTRAINS, POTENTIALLY_CONFLICTS) are both traversed; the provenance array lets the agent tell the user which hops are human-authored versus model-inferred. Returns an empty result set (not an error) when the anchor id does not exist — the agent should then fall back to a similarity search on the wording the user used."
+}

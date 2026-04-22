@@ -1,0 +1,22 @@
+{
+  "name": "requirements_by_standard",
+  "description": "Lists every requirement that cites a given public standard, optionally filtered by Design Assurance Level (DAL). Each row includes the requirement id, module, heading, summary, classification, the clause of the standard that is invoked (from the REFERENCES_STANDARD.clause property), and whether a verification procedure exists — so an auditor can see at a glance which clauses of, say, DO-178C at DAL-B are actually covered. Results are ordered so uncovered requirements come first within each module, which is the order an auditor reads them.",
+  "when_to_use": "Fire this template when the user asks for the requirements connected to a specific standard, with or without a DAL. Typical phrasings: 'which reqs cite DO-178C at DAL-B', 'list all MIL-STD-1553B requirements', 'ARP4754A coverage', 'show me every requirement that references ARINC 429'. The user must name a standard; the DAL level is optional and may be omitted. Pass null or an empty string for dal_level when the user does not mention a DAL.",
+  "parameters": [
+    {
+      "name": "standard_name",
+      "description": "The Standard.name exactly as stored in the graph. Example values: 'DO-178C', 'MIL-STD-1553B', 'ARP4754A', 'DO-254', 'DO-160G', 'ARINC-429', 'STANAG 4586'. Preserve hyphens and casing.",
+      "required": true,
+      "type": "string"
+    },
+    {
+      "name": "dal_level",
+      "description": "Optional Design Assurance Level filter. Accepts 'A', 'B', 'C', 'D', 'E'. Pass null or an empty string when the user does not mention a DAL. Matches either the REFERENCES_STANDARD.dal edge property or the Requirement.safety_classification node property.",
+      "required": false,
+      "type": "string"
+    }
+  ],
+  "cypher": "MATCH (r:Requirement)-[ref:REFERENCES_STANDARD]->(s:Standard {name: $standard_name})\nWHERE $dal_level IS NULL\n   OR $dal_level = ''\n   OR ref.dal = $dal_level\n   OR r.safety_classification = $dal_level\n   OR r.safety_classification = 'DAL-' + $dal_level\nOPTIONAL MATCH (r)-[:VERIFIED_BY]->(t:TestProcedure)\nWITH r, s, ref, count(DISTINCT t) AS test_count\nRETURN DISTINCT\n       s.name              AS standard,\n       r.module            AS module,\n       r.id                AS requirement_id,\n       r.heading           AS heading,\n       r.summary           AS summary,\n       r.classification    AS classification,\n       ref.clause          AS clause,\n       coalesce(ref.dal, r.safety_classification) AS dal,\n       CASE WHEN test_count > 0 THEN 'COVERED' ELSE 'GAP' END   AS verification_status,\n       test_count\nORDER BY module, verification_status DESC, requirement_id",
+  "limit": 50,
+  "notes": "The DAL filter is implemented permissively: it passes when the edge property, the node property, or either of them prefixed with 'DAL-' matches the user's input, because AeroScope has historically stored DAL on both the REFERENCES_STANDARD edge (per-standard DAL) and the Requirement node (overall safety classification). Verification status is a computed label ('COVERED' or 'GAP') rather than raw test data so the agent can render it directly in a compliance table. Results are ordered GAP-first within each module so an auditor sees the holes before the coverage."
+}

@@ -1,0 +1,22 @@
+{
+  "name": "shortest_path",
+  "description": "Returns the shortest traceability path between two requirements over the union of explicit trace edges (SATISFIES, DERIVES_FROM, REFINES, VERIFIES, CONFLICTS_WITH) and LLM-discovered ones (SEMANTICALLY_DEPENDS_ON, COMPLEMENTS, CONSTRAINS, POTENTIALLY_CONFLICTS), bounded to six hops. Each intermediate stop is emitted with its id, module, and heading, and each hop is annotated with the relationship type and provenance so the agent can build a 'because X, then Y, then Z' narrative when explaining how two requirements are connected. Exactly the shape needed to answer 'how is A related to B' questions where the user does not know whether the link exists at all.",
+  "when_to_use": "Fire this template when the user asks how two specific requirements are connected, or wants an explanatory path between them. Typical phrasings: 'how does FCC-118 relate to PWR-042', 'shortest link between REQ-A and REQ-B', 'path from STR7-NAV-014 to STR7-COMM-008', 'are these two requirements connected'. The user must give two requirement ids. For impact analysis on a single requirement, use impact_analysis.",
+  "parameters": [
+    {
+      "name": "req_a",
+      "description": "The Requirement.id of the first endpoint. Example values: 'FCC-118', 'REQ-PWR-042'. Extract verbatim from the user's question.",
+      "required": true,
+      "type": "string"
+    },
+    {
+      "name": "req_b",
+      "description": "The Requirement.id of the second endpoint. Example values: 'PWR-042', 'STR7-COMM-008'. Extract verbatim from the user's question.",
+      "required": true,
+      "type": "string"
+    }
+  ],
+  "cypher": "MATCH (a:Requirement {id: $req_a}),\n      (b:Requirement {id: $req_b})\nMATCH path = shortestPath((a)-[:SATISFIES|DERIVES_FROM|REFINES|VERIFIES|CONFLICTS_WITH|SEMANTICALLY_DEPENDS_ON|COMPLEMENTS|CONSTRAINS|POTENTIALLY_CONFLICTS*1..6]-(b))\nWITH path,\n     [n IN nodes(path) | { id: n.id, module: n.module, heading: n.heading, summary: n.summary }] AS stops,\n     [r IN relationships(path) | { type: type(r), provenance: coalesce(r.discovery_method, 'explicit'), confidence: r.confidence, rationale: r.rationale }] AS hops,\n     length(path)                                                                        AS hop_count,\n     size([r IN relationships(path) WHERE coalesce(r.discovery_method, 'explicit') = 'llm_implicit' | r]) AS llm_hop_count\nRETURN stops,\n       hops,\n       hop_count,\n       llm_hop_count,\n       CASE WHEN llm_hop_count = 0 THEN 'FULLY_EXPLICIT'\n            WHEN llm_hop_count = hop_count THEN 'FULLY_LLM'\n            ELSE 'MIXED'\n       END AS path_provenance",
+  "limit": 5,
+  "notes": "shortestPath with a six-hop bound is cheap on a 1000-requirement corpus and covers every realistic trace distance; paths longer than six hops are almost always noise. The path_provenance rollup ('FULLY_EXPLICIT', 'FULLY_LLM', 'MIXED') lets the agent caveat its answer: a fully-LLM path is a speculation worth flagging, a fully-explicit path is audit-grade. Returns no rows if the two requirements are unreachable within six hops, at which point the agent should suggest a similarity search for semantically related pairs instead of forcing a longer path. Limit of 5 accommodates shortestPath tie-breaks; most calls return exactly one row."
+}
