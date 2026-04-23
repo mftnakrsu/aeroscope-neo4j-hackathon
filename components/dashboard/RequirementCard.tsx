@@ -1,31 +1,36 @@
 import { PLATFORMS } from "@/lib/platforms";
 
 /**
- * Shape accepted by the card. Tolerant on purpose: the `platform_requirements`
- * Cypher template returns (requirement_id, heading, summary, module, dal,
- * classification, verification_status, platform), but this component may also
- * be rendered with corpus rows that have different casing. The optional
- * fields below let other agents (corpus browser, search results) reuse it
- * without mapping through an adapter.
+ * Shape accepted by the card. Tolerant on purpose: a few Cypher templates
+ * return slightly different column sets, so the fields below are all
+ * optional. The card renders whatever is present.
  */
 export type RequirementRow = {
   requirement_id?: string | null;
   id?: string | null;
+  /** The MD section the requirement sits under (e.g., "REQUIREMENTS > General"). */
   heading?: string | null;
+  /** The full requirement body — what the engineer actually wrote. Preferred. */
+  text?: string | null;
+  /** Optional short summary (used when templates produce a compressed blurb). */
   summary?: string | null;
   module?: string | null;
+  module_path?: string | null;
+  object_type?: string | null;
+  level?: number | null;
   platform?: string | null;
-  /** List of additional platforms the requirement is allocated to. */
   platforms?: string[] | null;
   classification?: string | null;
   /** Safety classification (DAL-A, DAL-B, ...). */
   dal?: string | null;
+  /** Priority / status come through when the underlying node has attributes. */
+  priority?: string | null;
   /** Primary standard reference (e.g. "DO-178C"). */
   standard?: string | null;
   standards?: string[] | null;
   system?: string | null;
   component?: string | null;
-  /** "COVERED" | "GAP" | "VERIFIED" | "OPEN" — we default styling on these. */
+  /** "COVERED" | "GAP" | "VERIFIED" | "OPEN" — card only surfaces positive signal. */
   verification_status?: string | null;
   status?: string | null;
 };
@@ -50,13 +55,37 @@ function pickPlatforms(row: RequirementRow): string[] {
   return [];
 }
 
+function pickBody(row: RequirementRow): string {
+  // Prefer the full requirement text; fall back to summary; fall back to
+  // heading only if neither body field is populated.
+  return (
+    (row.text && row.text.trim()) ||
+    (row.summary && row.summary.trim()) ||
+    (row.heading && row.heading.trim()) ||
+    ""
+  );
+}
+
+function isPositiveStatus(status: string | null): boolean {
+  if (!status) return false;
+  const s = status.toUpperCase();
+  return (
+    s === "COVERED" ||
+    s === "VERIFIED" ||
+    s === "OK" ||
+    s === "APPROVED" ||
+    s === "PARTIAL"
+  );
+}
+
 function statusChipClass(status: string | null): string {
   if (!status) return "chip";
   const s = status.toUpperCase();
-  if (s === "COVERED" || s === "VERIFIED" || s === "OK") return "chip verified";
-  if (s === "GAP" || s === "OPEN" || s === "UNVERIFIED") return "chip gap";
+  if (s === "COVERED" || s === "VERIFIED" || s === "OK" || s === "APPROVED")
+    return "chip verified";
   if (s === "PARTIAL" || s === "DRAFT") return "chip partial";
   if (s === "CONFLICT" || s === "FAIL") return "chip danger";
+  // GAP / OPEN / UNVERIFIED are noisy when everything is a gap — don't show.
   return "chip";
 }
 
@@ -67,27 +96,22 @@ function shortPlatformCode(name: string): string {
 
 export type RequirementCardProps = {
   row: RequirementRow;
-  /** Optional click handler — used by the Graph tab's search panel. */
   onSelect?: (row: RequirementRow) => void;
-  /** Visual emphasis for the active / focused row. */
   active?: boolean;
 };
 
-/**
- * Canonical requirement card used across tabs. Layout:
- *
- *   [id-chip] [system] [component] [standard]        [status]
- *   Heading (1 line, bold)
- *   Summary (2 line clamp, muted)
- *   Module · Platform badges · DAL
- */
-export function RequirementCard({ row, onSelect, active = false }: RequirementCardProps) {
+export function RequirementCard({
+  row,
+  onSelect,
+  active = false,
+}: RequirementCardProps) {
   const id = pickId(row);
-  const heading = row.heading ?? row.summary ?? "Untitled requirement";
-  const summary = row.summary ?? "";
+  const heading = row.heading ?? "";
+  const body = pickBody(row);
   const status = pickStatus(row);
   const standards = pickStandards(row);
   const platforms = pickPlatforms(row);
+  const showStatusChip = isPositiveStatus(status);
 
   const Tag = onSelect ? "button" : "div";
 
@@ -116,33 +140,44 @@ export function RequirementCard({ row, onSelect, active = false }: RequirementCa
             </span>
           ))}
           {row.dal ? <span className="chip warn">{row.dal}</span> : null}
+          {row.priority ? (
+            <span className="chip">{row.priority}</span>
+          ) : null}
         </div>
-        {status ? <span className={statusChipClass(status)}>{status}</span> : null}
+        {showStatusChip && status ? (
+          <span className={statusChipClass(status)}>{status}</span>
+        ) : null}
       </div>
 
-      <div className="font-semibold text-[14px] leading-snug text-text mb-1 line-clamp-1">
-        {heading}
-      </div>
-
-      {summary ? (
+      {/* Body — the actual requirement text, 3-line clamp for a dense list */}
+      {body ? (
         <p
-          className="text-[13px] leading-relaxed text-text-2 mb-3"
+          className="text-[14px] leading-relaxed text-text mb-3"
           style={{
             display: "-webkit-box",
-            WebkitLineClamp: 2,
+            WebkitLineClamp: 3,
             WebkitBoxOrient: "vertical",
             overflow: "hidden",
           }}
         >
-          {summary}
+          {body}
         </p>
       ) : null}
 
-      <div className="flex flex-wrap items-center gap-2 text-[11px] font-mono text-text-3">
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5 text-[11px] font-mono text-text-3">
         {row.module ? (
           <span className="inline-flex items-center gap-1">
             <span className="uppercase tracking-wider">Module</span>
             <span className="text-text-2">{row.module}</span>
+          </span>
+        ) : null}
+        {heading ? (
+          <span
+            className="inline-flex items-center gap-1 truncate max-w-[320px]"
+            title={heading}
+          >
+            <span className="uppercase tracking-wider">Section</span>
+            <span className="text-text-2 truncate">{heading}</span>
           </span>
         ) : null}
         {platforms.length > 0 ? (
@@ -165,6 +200,11 @@ export function RequirementCard({ row, onSelect, active = false }: RequirementCa
           <span className="inline-flex items-center gap-1">
             <span className="uppercase tracking-wider">Class</span>
             <span className="text-text-2">{row.classification}</span>
+          </span>
+        ) : null}
+        {onSelect ? (
+          <span className="ml-auto text-text-4 group-hover:text-text-2">
+            Click for details →
           </span>
         ) : null}
       </div>
