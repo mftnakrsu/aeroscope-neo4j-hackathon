@@ -94,15 +94,15 @@ function LoginInner() {
 
   return (
     <main
-      data-theme="dark"
-      className="relative min-h-screen overflow-hidden bg-bg text-text"
+      data-theme="light"
+      className="relative min-h-screen overflow-hidden bg-white text-text"
     >
       {/* ========= Ambient background layers ========= */}
       <div
         className="pointer-events-none absolute inset-0"
         style={{
           background:
-            "radial-gradient(1200px 700px at 28% 55%, rgba(79, 209, 197, 0.08), transparent 60%), radial-gradient(900px 600px at 80% 30%, rgba(255, 176, 32, 0.05), transparent 55%)",
+            "radial-gradient(1200px 700px at 28% 55%, rgba(6, 148, 162, 0.09), transparent 60%), radial-gradient(900px 600px at 80% 30%, rgba(0, 82, 204, 0.06), transparent 55%)",
         }}
       />
 
@@ -131,13 +131,13 @@ function LoginInner() {
         className="pointer-events-none absolute inset-0"
         style={{
           backgroundImage:
-            "linear-gradient(rgba(46, 56, 73, 0.25) 1px, transparent 1px), linear-gradient(90deg, rgba(46, 56, 73, 0.25) 1px, transparent 1px)",
+            "linear-gradient(rgba(15, 20, 32, 0.08) 1px, transparent 1px), linear-gradient(90deg, rgba(15, 20, 32, 0.08) 1px, transparent 1px)",
           backgroundSize: "56px 56px",
           maskImage:
             "radial-gradient(ellipse 900px 700px at 70% 50%, #000 30%, transparent 85%)",
           WebkitMaskImage:
             "radial-gradient(ellipse 900px 700px at 70% 50%, #000 30%, transparent 85%)",
-          opacity: 0.4,
+          opacity: 0.6,
         }}
       />
 
@@ -173,9 +173,9 @@ function LoginInner() {
               className="mb-6 inline-block rounded-[14px] p-3"
               style={{
                 background:
-                  "linear-gradient(180deg, rgba(255,255,255,0.04) 0%, rgba(255,255,255,0.01) 100%)",
-                border: "1px solid rgba(255,255,255,0.08)",
-                boxShadow: "0 10px 40px rgba(0,0,0,0.35)",
+                  "linear-gradient(180deg, rgba(255,255,255,1) 0%, rgba(248,250,253,1) 100%)",
+                border: "1px solid rgba(15,20,32,0.08)",
+                boxShadow: "0 10px 30px rgba(15,20,32,0.08)",
               }}
             >
               <Image
@@ -238,16 +238,21 @@ function LoginInner() {
             </div>
           </div>
 
-          {/* Login card (glass-morphism) */}
-          <div className="w-full justify-self-center lg:justify-self-end">
+          {/* Login card — dark glass-morphism terminal floating on light page.
+              Inner `data-theme="dark"` means all tokens (text, line, etc.)
+              inside the card resolve to dark values so content stays readable. */}
+          <div
+            data-theme="dark"
+            className="w-full justify-self-center lg:justify-self-end"
+          >
             <div
               className="relative rounded-[10px] backdrop-blur-xl"
               style={{
                 background:
-                  "linear-gradient(180deg, rgba(17, 21, 29, 0.82) 0%, rgba(11, 14, 19, 0.88) 100%)",
-                border: "1px solid var(--line-2)",
+                  "linear-gradient(180deg, rgba(17, 21, 29, 0.95) 0%, rgba(11, 14, 19, 0.98) 100%)",
+                border: "1px solid rgba(46, 56, 73, 0.8)",
                 boxShadow:
-                  "0 30px 80px rgba(0, 0, 0, 0.55), 0 0 0 1px rgba(255, 255, 255, 0.02) inset, 0 0 60px rgba(255, 176, 32, 0.05)",
+                  "0 24px 60px rgba(15, 20, 32, 0.18), 0 0 0 1px rgba(255, 255, 255, 0.02) inset",
               }}
             >
               <div
