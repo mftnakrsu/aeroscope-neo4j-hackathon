@@ -11,12 +11,13 @@
     "scrub-check": "grep -rlE \"TAI\\b|ANKA|Aksungur|KAAN|TOLUN|TUSA[SŞ]|ASELSAN|ROKETSAN|BAYKAR|HAVELSAN|TEI\\b|T[uü]rk|TSK|Turkish Aerospace|MUM-T\" app components lib middleware.ts 2>/dev/null | grep -v node_modules || echo 'scrub-check: 0 hits'"
   },
   "dependencies": {
+    "@supabase/ssr": "^0.5.2",
+    "@supabase/supabase-js": "^2.46.1",
+    "neo4j-driver": "^5.28.1",
     "next": "^14.2.33",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
-    "neo4j-driver": "^5.28.1",
-    "@supabase/ssr": "^0.5.2",
-    "@supabase/supabase-js": "^2.46.1"
+    "react-force-graph-2d": "^1.29.1"
   },
   "devDependencies": {
     "@types/node": "^20.14.0",

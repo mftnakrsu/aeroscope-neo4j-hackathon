@@ -1,0 +1,23 @@
+{
+  "name": "graph_slice",
+  "description": "Returns a bounded slice of the traceability graph suitable for a client-side force-directed visualization. Each row represents one Requirement node (id, module, heading, object_type) together with the list of its outgoing trace edges (SATISFIES, DERIVES_FROM, REFINES, VERIFIES, REFERENCES, NEXT, USES_PARAMETER, CONTAINS) to other requirements inside the same slice. The client flattens these rows into `{ nodes: [{id, module, heading, type}], links: [{source, target, type}] }` and feeds that straight into react-force-graph-2d. The result set is capped so the renderer stays snappy on Aura Free (<= 200 rows).",
+  "when_to_use": "Fire this template when the user wants a visual overview of the traceability graph — the Graph tab on the dashboard calls it on every filter change. Typical phrasings (routed from the UI, not from free-text): 'show me the graph for FCC', 'visualise module NAV', 'load 50 requirements on the graph'. Accepts an optional module_name filter; when omitted, returns a cross-module slice. Do not use for drill-down questions ('what breaks if I change FCC-042') — use impact_analysis instead.",
+  "parameters": [
+    {
+      "name": "module_name",
+      "description": "Optional Module.name filter. When provided, only requirements whose module property equals this value are included, and only edges whose target is also in the same module are emitted (keeps the rendered subgraph visually coherent). Example values: 'FCC', 'FMS', 'AUTO', 'GPS', 'INS'. Pass null (or omit) to return a cross-module slice sampled across every module currently loaded.",
+      "required": false,
+      "type": "string"
+    },
+    {
+      "name": "limit",
+      "description": "Maximum number of Requirement nodes to return. Controls the visual density of the graph. The Graph tab exposes 20 / 50 / 100 preset buttons. Hard ceiling is 200 — anything larger is rejected client-side because the canvas renderer bogs down past that.",
+      "required": false,
+      "type": "integer",
+      "default": 60
+    }
+  ],
+  "cypher": "MATCH (r:Requirement)\nWHERE $module_name IS NULL OR r.module = $module_name\nWITH r\nORDER BY r.module, r.id\nLIMIT $limit\nWITH collect(r) AS reqs, collect(r.id) AS ids\nUNWIND reqs AS r\nOPTIONAL MATCH (r)-[rel]->(r2:Requirement)\nWHERE r2.id IN ids\n  AND type(rel) IN ['SATISFIES','DERIVES_FROM','REFINES','VERIFIES','REFERENCES','NEXT','USES_PARAMETER','CONTAINS']\nWITH r,\n     [x IN collect({type: type(rel), target: r2.id}) WHERE x.target IS NOT NULL] AS outgoing\nRETURN r.id          AS id,\n       r.module      AS module,\n       r.heading     AS heading,\n       r.object_type AS object_type,\n       outgoing      AS outgoing\nORDER BY module, id",
+  "limit": 200,
+  "notes": "Return contract for the API route: each row is one Requirement node. Columns are `id` (string, unique), `module` (string, one of FCC/FMS/AUTO/GPS/INS today), `heading` (string, short label), `object_type` (string or null, e.g. 'Functional', 'Performance'), `outgoing` (list of {type: string, target: string}). The client builds `nodes` from the first four columns and `links` by flattening `outgoing` into `{source: row.id, target: edge.target, type: edge.type}`. Any edge whose target is not in the current slice is dropped at query time (the `r2.id IN ids` guard), so the client never has to filter dangling edges. The `limit` parameter bounds the node count, not the edge count — edges are collected exhaustively for the nodes actually selected, which is the desired shape for a force-directed layout. Edge types intentionally exclude SEMANTICALLY_DEPENDS_ON / POTENTIALLY_CONFLICTS (LLM-inferred) so the default view shows human-authored traceability only."
+}

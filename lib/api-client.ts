@@ -12,7 +12,9 @@ export type TemplateId =
   | "requirements_by_standard"
   | "conflicts_and_constraints"
   | "cross_module_refs"
-  | "shortest_path";
+  | "shortest_path"
+  | "all_requirements"
+  | "graph_slice";
 
 export type QueryRequest =
   | {
