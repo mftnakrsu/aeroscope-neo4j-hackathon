@@ -22,7 +22,7 @@
 
 **https://aeroscope-neo4j-hackathon.vercel.app**
 
-Sign in with email/password or continue with Google — auth is handled by Supabase. New Google accounts are created on first sign-in.
+Create an account with email and password — auth is handled by Supabase. New users click "Need an account? Create one" on the login screen to sign up.
 
 ---
 
@@ -59,7 +59,7 @@ Pick any requirement and AeroScope fans out in both directions. **Upstream**, it
 - **Next.js 14 App Router** web UI renders the dashboard, query console, and traceability views.
 - **`/api/query`** serverless route (Node runtime, `fra1` region) accepts a `template_id` + params, loads the matching whitelisted Cypher from `aura/cypher_templates/*.json`, and runs it against Neo4j Aura.
 - **Cypher templates as a whitelist** — the server will not execute arbitrary Cypher from the client; every template is version-controlled in the repo.
-- **Supabase auth** (email/password + Google OAuth) gates `/dashboard/*` via Edge middleware that refreshes the session cookie on every request.
+- **Supabase auth** (email/password) gates `/dashboard/*` via Edge middleware that refreshes the session cookie on every request.
 - **Python pipeline** (dev-only, not deployed) generates the synthetic corpus, loads it to Aura, enriches relationships, and caches embeddings.
 
 ```
@@ -81,7 +81,7 @@ browser ── /dashboard ──┐
 - **Frontend:** Next.js 14 (App Router), React 18, TypeScript, Tailwind CSS
 - **Runtime:** Node 20 serverless functions on Vercel (region `fra1`)
 - **Database:** Neo4j Aura (EU region recommended to keep latency with `fra1`)
-- **Auth:** Supabase (`@supabase/ssr`) — email/password + Google OAuth, cookie-based sessions refreshed in Edge middleware
+- **Auth:** Supabase (`@supabase/ssr`) — email/password, cookie-based sessions refreshed in Edge middleware
 - **Python pipeline:** Python 3.9+, `neo4j-driver`, `openai` for corpus generation and enrichment
 
 ---
@@ -114,8 +114,8 @@ npm run scrub-check   # guardrail — fails if proprietary names sneak in
 
 1. Create a free project at <https://supabase.com/>.
 2. In **Project Settings → API**, copy the **Project URL** into `NEXT_PUBLIC_SUPABASE_URL` and the **Publishable key** into `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY`.
-3. In **Authentication → Providers → Google**, enable Google and paste your Google OAuth client ID + secret. The redirect URL Supabase gives you (`https://<your-project>.supabase.co/auth/v1/callback`) must be added as an authorized redirect URI in your Google OAuth client.
-4. In **Authentication → URL Configuration**, add `http://localhost:3000` and your Vercel URL to the **Site URL** / **Redirect URLs** allowlist.
+3. In **Authentication → Providers → Email**, keep Email enabled. If you want sign-up to be instant (no confirmation email), toggle **Confirm email** off for the hackathon demo.
+4. In **Authentication → URL Configuration**, add `http://localhost:3000` and your Vercel URL to the **Site URL** / **Redirect URLs** allowlist so the confirmation emails (if enabled) point back to the right place.
 
 ---
 

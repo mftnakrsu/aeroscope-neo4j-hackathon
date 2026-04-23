@@ -28,10 +28,10 @@ Browser ──▶ middleware.ts ──▶ refreshes Supabase session on every re
 
 ## Sign-in flows supported
 
-- **Email + password** — `supabase.auth.signInWithPassword({ email, password })` from the login page's Client Component. Accounts must exist (create via Supabase dashboard or Google OAuth first).
-- **Google OAuth** — `supabase.auth.signInWithOAuth({ provider: "google", ... })`. Accounts are auto-created on first sign-in.
+- **Email + password sign-in** — `supabase.auth.signInWithPassword({ email, password })` for existing users.
+- **Email + password sign-up** — `supabase.auth.signUp({ email, password })` for new users. If Supabase has "Confirm email" enabled (the default), the user gets a confirmation link that hits `/auth/callback` and completes the session. With confirmation off, sign-up signs the user in immediately.
 
-The login page (`app/login/page.tsx`) surfaces both. Magic link and other providers are intentionally off for this build.
+The login page (`app/login/page.tsx`) surfaces both via a sign-in / sign-up toggle. Google OAuth, magic link, and other providers are intentionally off for this build.
 
 ## How the UI consumes it
 
@@ -43,13 +43,16 @@ import { createClient } from "@/utils/supabase/client";
 
 const supabase = createClient();
 
-// Email + password
+// Sign in
 await supabase.auth.signInWithPassword({ email, password });
 
-// Google OAuth
-await supabase.auth.signInWithOAuth({
-  provider: "google",
-  options: { redirectTo: `${location.origin}/auth/callback?next=/dashboard` },
+// Sign up
+await supabase.auth.signUp({
+  email,
+  password,
+  options: {
+    emailRedirectTo: `${location.origin}/auth/callback?next=/dashboard`,
+  },
 });
 ```
 
@@ -85,10 +88,10 @@ Dashboard → **Authentication → URL Configuration**:
   - `https://aeroscope-neo4j-hackathon.vercel.app/auth/callback`
   - `https://aeroscope-neo4j-hackathon-*.vercel.app/auth/callback` (Vercel preview deploys)
 
-Dashboard → **Authentication → Providers**:
+Dashboard → **Authentication → Providers → Email**:
 
-- **Email** — enable email + password (disable "confirm email" for the hackathon demo if you want instant sign-up).
-- **Google** — enable; paste Google OAuth client ID + secret. Configure the Google Cloud OAuth consent screen + authorized redirect URI: `https://<your-project>.supabase.co/auth/v1/callback`.
+- Keep **Email** enabled — both sign-in and sign-up with password.
+- Toggle **Confirm email** off for the hackathon demo to make sign-up instant (otherwise the user gets a confirmation link and cannot reach `/dashboard` until they click it).
 
 ## Local dev
 
