@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { TabHeader } from "@/components/dashboard/TabHeader";
 import { RequirementCard, type RequirementRow } from "@/components/dashboard/RequirementCard";
+import { RequirementDrawer } from "@/components/dashboard/RequirementDrawer";
 import { SkeletonCardList } from "@/components/dashboard/SkeletonCard";
 import { runQuery, ApiError, type QueryRow } from "@/lib/api-client";
 import { MODULES } from "@/lib/modules";
@@ -15,6 +16,7 @@ export default function RequirementsTab() {
   const [rows, setRows] = useState<RequirementRow[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [page, setPage] = useState(1);
+  const [selected, setSelected] = useState<RequirementRow | null>(null);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -108,7 +110,11 @@ export default function RequirementsTab() {
         <>
           <div className="grid grid-cols-1 gap-3">
             {paginated.map((row, idx) => (
-              <RequirementCard key={`${row.requirement_id ?? row.id ?? idx}`} row={row} />
+              <RequirementCard
+                key={`${row.requirement_id ?? row.id ?? idx}`}
+                row={row}
+                onSelect={setSelected}
+              />
             ))}
           </div>
           <Pagination
@@ -119,6 +125,8 @@ export default function RequirementsTab() {
           />
         </>
       )}
+
+      <RequirementDrawer row={selected} onClose={() => setSelected(null)} />
     </>
   );
 }
