@@ -1,351 +1,353 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { TabHeader } from "@/components/dashboard/TabHeader";
+import { GraphViz, type GraphData, type GraphNode } from "@/components/dashboard/GraphViz";
+import { runQuery, ApiError, type QueryRow } from "@/lib/api-client";
 
-// Static sample nodes/edges so the panel has something to render before the
-// real force-directed viz lands. Layout is hand-placed to feel like a trace
-// matrix: anchor on the left, dependents fanning right, tests on the far right.
+const MODULE_OPTIONS = ["All", "FCC", "FMS", "AUTO", "GPS", "INS"] as const;
+const LIMIT_OPTIONS = [20, 50, 100] as const;
 
-type SampleNode = {
-  id: string;
-  x: number;
-  y: number;
-  kind: "requirement" | "module" | "test" | "standard";
-  label: string;
+type ModuleChoice = (typeof MODULE_OPTIONS)[number];
+type LimitChoice = (typeof LIMIT_OPTIONS)[number];
+
+/**
+ * Shape of one row emitted by the `graph_slice` Cypher template. Each row is
+ * one Requirement plus its outgoing trace edges (already scoped to the same
+ * slice on the server, so no dangling-edge filtering needed here).
+ */
+type GraphSliceRow = {
+  id?: unknown;
+  module?: unknown;
+  heading?: unknown;
+  object_type?: unknown;
+  outgoing?: unknown;
 };
 
-type SampleEdge = {
-  from: string;
-  to: string;
-  rel: string;
+type OutgoingEdge = {
+  type?: unknown;
+  target?: unknown;
 };
 
-const SAMPLE_NODES: SampleNode[] = [
-  { id: "FCC-042", x: 90, y: 220, kind: "requirement", label: "FCC-042" },
-  { id: "FCC-018", x: 230, y: 120, kind: "requirement", label: "FCC-018" },
-  { id: "FCC-071", x: 230, y: 200, kind: "requirement", label: "FCC-071" },
-  { id: "NAV-014", x: 230, y: 290, kind: "requirement", label: "NAV-014" },
-  { id: "PWR-033", x: 230, y: 370, kind: "requirement", label: "PWR-033" },
-  { id: "PAY-007", x: 380, y: 80, kind: "requirement", label: "PAY-007" },
-  { id: "COM-019", x: 380, y: 170, kind: "requirement", label: "COM-019" },
-  { id: "NAV-052", x: 380, y: 260, kind: "requirement", label: "NAV-052" },
-  { id: "PWR-055", x: 380, y: 360, kind: "requirement", label: "PWR-055" },
-  { id: "MOD-FCC", x: 530, y: 130, kind: "module", label: "FCC" },
-  { id: "MOD-NAV", x: 530, y: 230, kind: "module", label: "NAV" },
-  { id: "MOD-PWR", x: 530, y: 340, kind: "module", label: "PWR" },
-  { id: "STD-DO178C", x: 680, y: 100, kind: "standard", label: "DO-178C" },
-  { id: "STD-ARP4754A", x: 680, y: 210, kind: "standard", label: "ARP4754A" },
-  { id: "STD-DO254", x: 680, y: 330, kind: "standard", label: "DO-254" },
-  { id: "TP-101", x: 830, y: 90, kind: "test", label: "TP-101" },
-  { id: "TP-117", x: 830, y: 180, kind: "test", label: "TP-117" },
-  { id: "TP-233", x: 830, y: 280, kind: "test", label: "TP-233" },
-  { id: "TP-319", x: 830, y: 360, kind: "test", label: "TP-319" },
-  { id: "TP-408", x: 830, y: 430, kind: "test", label: "TP-408" },
-];
+function rowsToGraph(rows: QueryRow[]): GraphData {
+  const nodes: GraphNode[] = [];
+  const seen = new Set<string>();
+  const links: { source: string; target: string; type: string }[] = [];
 
-const SAMPLE_EDGES: SampleEdge[] = [
-  { from: "FCC-042", to: "FCC-018", rel: "SATISFIES" },
-  { from: "FCC-042", to: "FCC-071", rel: "DERIVES_FROM" },
-  { from: "FCC-042", to: "NAV-014", rel: "SATISFIES" },
-  { from: "FCC-042", to: "PWR-033", rel: "CONSTRAINS" },
-  { from: "FCC-018", to: "PAY-007", rel: "REFINES" },
-  { from: "FCC-018", to: "COM-019", rel: "DERIVES_FROM" },
-  { from: "NAV-014", to: "NAV-052", rel: "SATISFIES" },
-  { from: "PWR-033", to: "PWR-055", rel: "REFINES" },
-  { from: "PAY-007", to: "MOD-FCC", rel: "PART_OF" },
-  { from: "COM-019", to: "MOD-FCC", rel: "PART_OF" },
-  { from: "NAV-052", to: "MOD-NAV", rel: "PART_OF" },
-  { from: "PWR-055", to: "MOD-PWR", rel: "PART_OF" },
-  { from: "MOD-FCC", to: "STD-DO178C", rel: "REFERENCES_STANDARD" },
-  { from: "MOD-NAV", to: "STD-ARP4754A", rel: "REFERENCES_STANDARD" },
-  { from: "MOD-PWR", to: "STD-DO254", rel: "REFERENCES_STANDARD" },
-  { from: "STD-DO178C", to: "TP-101", rel: "VERIFIES" },
-  { from: "STD-DO178C", to: "TP-117", rel: "VERIFIES" },
-  { from: "STD-ARP4754A", to: "TP-233", rel: "VERIFIES" },
-  { from: "STD-DO254", to: "TP-319", rel: "VERIFIES" },
-  { from: "STD-DO254", to: "TP-408", rel: "VERIFIES" },
-];
+  for (const raw of rows) {
+    const row = raw as GraphSliceRow;
+    const id = typeof row.id === "string" ? row.id : null;
+    if (!id) continue;
+    if (!seen.has(id)) {
+      seen.add(id);
+      nodes.push({
+        id,
+        module: typeof row.module === "string" ? row.module : null,
+        heading: typeof row.heading === "string" ? row.heading : null,
+        type: typeof row.object_type === "string" ? row.object_type : null,
+      });
+    }
+    const outgoing = Array.isArray(row.outgoing) ? (row.outgoing as OutgoingEdge[]) : [];
+    for (const edge of outgoing) {
+      const target = typeof edge?.target === "string" ? edge.target : null;
+      const type = typeof edge?.type === "string" ? edge.type : null;
+      if (!target || !type) continue;
+      links.push({ source: id, target, type });
+    }
+  }
 
-const REL_TYPES = [
-  "SATISFIES",
-  "DERIVES_FROM",
-  "REFINES",
-  "VERIFIES",
-  "REFERENCES_STANDARD",
-  "CONSTRAINS",
-  "PART_OF",
-] as const;
+  // Drop any link whose endpoint is not in the node set (defensive — the
+  // server already filters these, but a malformed row should not crash the
+  // renderer).
+  const nodeIds = new Set(nodes.map((n) => n.id));
+  const safeLinks = links.filter((l) => nodeIds.has(l.source) && nodeIds.has(l.target));
 
-const NODE_COLORS: Record<SampleNode["kind"], string> = {
-  requirement: "var(--accent)",
-  module: "var(--blue)",
-  test: "var(--green)",
-  standard: "var(--cyan)",
-};
-
-const SAMPLE_SEARCH_RESULTS = [
-  { id: "FCC-042", heading: "Autopilot command authority hand-off" },
-  { id: "FCC-018", heading: "Primary flight control loop closure" },
-  { id: "NAV-014", heading: "GNSS-denied dead-reckoning fallback" },
-  { id: "PWR-033", heading: "Undervoltage threshold on main bus" },
-  { id: "COM-019", heading: "Secure datalink reacquisition" },
-  { id: "PAY-007", heading: "ISR payload gimbal stabilisation" },
-];
+  return { nodes, links: safeLinks };
+}
 
 export default function GraphTab() {
-  const [hopDepth, setHopDepth] = useState(2);
-  const [enabledRels, setEnabledRels] = useState<Set<string>>(new Set(REL_TYPES));
-  const [search, setSearch] = useState("");
-  const [selected, setSelected] = useState<string | null>("FCC-042");
+  const [moduleChoice, setModuleChoice] = useState<ModuleChoice>("All");
+  const [limit, setLimit] = useState<LimitChoice>(50);
+  const [data, setData] = useState<GraphData | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [selected, setSelected] = useState<GraphNode | null>(null);
+  const [reloadKey, setReloadKey] = useState(0);
 
-  const nodeById = useMemo(() => new Map(SAMPLE_NODES.map((n) => [n.id, n])), []);
+  useEffect(() => {
+    const controller = new AbortController();
+    setData(null);
+    setError(null);
+    setSelected(null);
 
-  const visibleEdges = useMemo(
-    () => SAMPLE_EDGES.filter((e) => enabledRels.has(e.rel)),
-    [enabledRels],
-  );
+    const params: Record<string, unknown> = { limit };
+    if (moduleChoice !== "All") {
+      params.module_name = moduleChoice;
+    } else {
+      // Explicit null lets the Cypher `$module_name IS NULL` guard short-circuit.
+      params.module_name = null;
+    }
 
-  const filteredResults = useMemo(() => {
-    const q = search.trim().toLowerCase();
-    if (!q) return SAMPLE_SEARCH_RESULTS;
-    return SAMPLE_SEARCH_RESULTS.filter(
-      (r) =>
-        r.id.toLowerCase().includes(q) || r.heading.toLowerCase().includes(q),
-    );
-  }, [search]);
+    runQuery(
+      {
+        template_id: "graph_slice",
+        params,
+      },
+      { signal: controller.signal },
+    )
+      .then((resp) => {
+        const rows = (resp.rows ?? []) as QueryRow[];
+        setData(rowsToGraph(rows));
+      })
+      .catch((err: unknown) => {
+        if (err instanceof DOMException && err.name === "AbortError") return;
+        const message =
+          err instanceof ApiError
+            ? err.message
+            : err instanceof Error
+              ? err.message
+              : "Unknown error loading graph";
+        setError(message);
+        setData({ nodes: [], links: [] });
+      });
 
-  function toggleRel(rel: string) {
-    setEnabledRels((prev) => {
-      const next = new Set(prev);
-      if (next.has(rel)) next.delete(rel);
-      else next.add(rel);
-      return next;
-    });
-  }
+    return () => controller.abort();
+  }, [moduleChoice, limit, reloadKey]);
+
+  const stats = useMemo(() => {
+    if (!data) return null;
+    return {
+      nodes: data.nodes.length,
+      links: data.links.length,
+    };
+  }, [data]);
 
   return (
     <>
       <TabHeader
         title="Graph"
         crumbs={[{ label: "Analysis" }, { label: "Graph" }]}
-        subtitle="Explore traceability as a graph — pick a requirement on the left, walk hops on the right."
+        subtitle="Force-directed view of the traceability graph. Pick a module to scope the slice, then click any node for details."
         actions={
           <span className="text-[10px] font-mono text-text-3 uppercase tracking-wider">
-            Depth {hopDepth} · {enabledRels.size} rel types
+            {stats ? `${stats.nodes} nodes · ${stats.links} edges` : "Loading…"}
           </span>
         }
       />
 
-      <div className="grid grid-cols-1 lg:grid-cols-[280px_1fr] gap-4">
-        {/* LEFT: search + result list */}
-        <aside className="card pad">
-          <div className="text-[10px] font-mono uppercase tracking-wider text-text-3 mb-2">
-            Find requirement
-          </div>
-          <input
-            type="search"
-            placeholder="FCC-042, undervoltage, gimbal..."
-            value={search}
-            onChange={(event) => setSearch(event.target.value)}
-            className="input h-9 text-[13px]"
+      <div className="grid grid-cols-1 lg:grid-cols-[1fr_320px] gap-4">
+        <section className="flex flex-col gap-4 min-w-0">
+          <Controls
+            moduleChoice={moduleChoice}
+            limit={limit}
+            onModuleChange={setModuleChoice}
+            onLimitChange={setLimit}
+            onReload={() => setReloadKey((n) => n + 1)}
+            disabled={data === null}
           />
-          <ul className="mt-3 flex flex-col gap-1 max-h-[400px] overflow-y-auto">
-            {filteredResults.map((r) => {
-              const active = selected === r.id;
-              return (
-                <li key={r.id}>
-                  <button
-                    type="button"
-                    onClick={() => setSelected(r.id)}
-                    className={[
-                      "w-full text-left rounded-md border px-2.5 py-2 transition-colors",
-                      active
-                        ? "border-accent/50 bg-accent/10"
-                        : "border-line bg-bg-2 hover:bg-bg-hover",
-                    ].join(" ")}
-                  >
-                    <div className="flex items-center gap-2">
-                      <span className="chip id">{r.id}</span>
-                    </div>
-                    <div className="text-[12px] text-text-2 mt-1 line-clamp-2">
-                      {r.heading}
-                    </div>
-                  </button>
-                </li>
-              );
-            })}
-            {filteredResults.length === 0 ? (
-              <li className="text-[12px] text-text-3 px-1 py-3">No matches.</li>
-            ) : null}
-          </ul>
-        </aside>
 
-        {/* RIGHT: viz + controls */}
-        <section className="flex flex-col gap-4">
           <div className="card relative overflow-hidden">
-            <div className="absolute top-3 left-3 text-[10px] font-mono uppercase tracking-wider text-text-3">
-              Interactive viz coming soon
-            </div>
-            <div className="absolute top-3 right-3 flex items-center gap-1.5 text-[10px] font-mono text-text-3">
-              <span className="inline-flex items-center gap-1">
-                <span className="w-2 h-2 rounded-full" style={{ background: NODE_COLORS.requirement }} />
-                Req
-              </span>
-              <span className="inline-flex items-center gap-1">
-                <span className="w-2 h-2 rounded-full" style={{ background: NODE_COLORS.module }} />
-                Module
-              </span>
-              <span className="inline-flex items-center gap-1">
-                <span className="w-2 h-2 rounded-full" style={{ background: NODE_COLORS.standard }} />
-                Standard
-              </span>
-              <span className="inline-flex items-center gap-1">
-                <span className="w-2 h-2 rounded-full" style={{ background: NODE_COLORS.test }} />
-                Test
-              </span>
-            </div>
-            <svg
-              viewBox="0 0 920 500"
-              className="w-full h-[460px] block"
-              role="img"
-              aria-label="Sample graph preview"
-            >
-              <defs>
-                <marker
-                  id="arrow"
-                  viewBox="0 0 10 10"
-                  refX="8"
-                  refY="5"
-                  markerWidth="6"
-                  markerHeight="6"
-                  orient="auto-start-reverse"
-                >
-                  <path d="M 0 0 L 10 5 L 0 10 z" fill="var(--cyan)" opacity="0.5" />
-                </marker>
-              </defs>
-
-              {/* Edges */}
-              <g>
-                {visibleEdges.map((edge, idx) => {
-                  const from = nodeById.get(edge.from);
-                  const to = nodeById.get(edge.to);
-                  if (!from || !to) return null;
-                  const highlighted =
-                    selected === edge.from || selected === edge.to;
-                  return (
-                    <line
-                      key={`${edge.from}-${edge.to}-${idx}`}
-                      x1={from.x}
-                      y1={from.y}
-                      x2={to.x}
-                      y2={to.y}
-                      stroke="var(--cyan)"
-                      strokeOpacity={highlighted ? 0.75 : 0.22}
-                      strokeWidth={highlighted ? 1.4 : 0.9}
-                      markerEnd="url(#arrow)"
-                    />
-                  );
-                })}
-              </g>
-
-              {/* Nodes */}
-              <g>
-                {SAMPLE_NODES.map((n) => {
-                  const active = selected === n.id;
-                  const color = NODE_COLORS[n.kind];
-                  const r = n.kind === "requirement" ? 16 : 12;
-                  return (
-                    <g
-                      key={n.id}
-                      transform={`translate(${n.x} ${n.y})`}
-                      style={{ cursor: "pointer" }}
-                      onClick={() => setSelected(n.id)}
-                    >
-                      <circle
-                        r={r + (active ? 4 : 0)}
-                        fill="transparent"
-                        stroke={color}
-                        strokeOpacity={active ? 0.9 : 0}
-                        strokeWidth="1.5"
-                      />
-                      <circle r={r} fill={color} fillOpacity={active ? 0.3 : 0.15} stroke={color} strokeWidth="1" />
-                      <text
-                        y="4"
-                        textAnchor="middle"
-                        className="mono"
-                        fontSize="10"
-                        fill="var(--text)"
-                      >
-                        {n.label}
-                      </text>
-                    </g>
-                  );
-                })}
-              </g>
-            </svg>
-          </div>
-
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-            <div className="card pad">
-              <label
-                htmlFor="hop-depth"
-                className="text-[10px] font-mono uppercase tracking-wider text-text-3"
-              >
-                Hop depth
-              </label>
-              <div className="flex items-center gap-3 mt-2">
-                <input
-                  id="hop-depth"
-                  type="range"
-                  min={1}
-                  max={3}
-                  step={1}
-                  value={hopDepth}
-                  onChange={(event) => setHopDepth(Number(event.target.value))}
-                  className="w-full accent-[color:var(--accent)]"
-                />
-                <span className="mono text-accent text-sm min-w-[1.5rem] text-right">
-                  {hopDepth}
-                </span>
-              </div>
-              <div className="mt-2 flex justify-between text-[10px] font-mono text-text-3">
-                <span>Direct</span>
-                <span>Transitive</span>
-                <span>Full blast</span>
-              </div>
-            </div>
-
-            <div className="card pad">
-              <div className="text-[10px] font-mono uppercase tracking-wider text-text-3 mb-2">
-                Relationship types
-              </div>
-              <div className="flex flex-wrap gap-1.5">
-                {REL_TYPES.map((rel) => {
-                  const active = enabledRels.has(rel);
-                  return (
-                    <label
-                      key={rel}
-                      className={[
-                        "inline-flex items-center gap-1.5 chip cursor-pointer select-none",
-                        active ? "standard" : "",
-                      ].join(" ")}
-                    >
-                      <input
-                        type="checkbox"
-                        checked={active}
-                        onChange={() => toggleRel(rel)}
-                        className="accent-[color:var(--accent)]"
-                      />
-                      {rel}
-                    </label>
-                  );
-                })}
-              </div>
-            </div>
+            {data === null ? (
+              <GraphLoading />
+            ) : error && data.nodes.length === 0 ? (
+              <GraphError message={error} />
+            ) : data.nodes.length === 0 ? (
+              <GraphEmpty module={moduleChoice} />
+            ) : (
+              <GraphViz
+                data={data}
+                onNodeSelect={setSelected}
+                selectedId={selected?.id ?? null}
+                height={520}
+              />
+            )}
           </div>
         </section>
+
+        <aside className="min-w-0">
+          <DetailsPanel node={selected} module={moduleChoice} />
+        </aside>
       </div>
     </>
+  );
+}
+
+function Controls({
+  moduleChoice,
+  limit,
+  onModuleChange,
+  onLimitChange,
+  onReload,
+  disabled,
+}: {
+  moduleChoice: ModuleChoice;
+  limit: LimitChoice;
+  onModuleChange: (m: ModuleChoice) => void;
+  onLimitChange: (n: LimitChoice) => void;
+  onReload: () => void;
+  disabled: boolean;
+}) {
+  return (
+    <div className="card pad flex flex-wrap items-end gap-4">
+      <div className="flex flex-col gap-1.5 min-w-[160px]">
+        <label
+          htmlFor="graph-module"
+          className="text-[10px] font-mono uppercase tracking-wider text-text-3"
+        >
+          Module
+        </label>
+        <select
+          id="graph-module"
+          value={moduleChoice}
+          onChange={(event) => onModuleChange(event.target.value as ModuleChoice)}
+          className="input h-9 text-[13px]"
+        >
+          {MODULE_OPTIONS.map((m) => (
+            <option key={m} value={m}>
+              {m}
+            </option>
+          ))}
+        </select>
+      </div>
+
+      <div className="flex flex-col gap-1.5 min-w-[200px] grow">
+        <div className="flex items-center justify-between">
+          <label
+            htmlFor="graph-limit"
+            className="text-[10px] font-mono uppercase tracking-wider text-text-3"
+          >
+            Node limit
+          </label>
+          <span className="mono text-accent text-[12px]">{limit}</span>
+        </div>
+        <div className="flex items-center gap-1">
+          {LIMIT_OPTIONS.map((n) => {
+            const active = n === limit;
+            return (
+              <button
+                key={n}
+                type="button"
+                onClick={() => onLimitChange(n)}
+                className={[
+                  "btn sm flex-1 justify-center",
+                  active ? "primary" : "",
+                ].join(" ")}
+              >
+                {n}
+              </button>
+            );
+          })}
+        </div>
+      </div>
+
+      <div className="flex items-center gap-2">
+        <button
+          type="button"
+          className="btn sm"
+          onClick={onReload}
+          disabled={disabled}
+        >
+          Reload graph
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function DetailsPanel({
+  node,
+  module,
+}: {
+  node: GraphNode | null;
+  module: ModuleChoice;
+}) {
+  if (!node) {
+    return (
+      <div className="card pad">
+        <div className="text-[10px] font-mono uppercase tracking-wider text-text-3 mb-2">
+          Node details
+        </div>
+        <p className="text-[13px] text-text-2">
+          Click any node to inspect its id, module, and heading.
+        </p>
+        <div className="mt-4 text-[11px] text-text-3">
+          Current scope:{" "}
+          <span className="mono text-text-2">{module === "All" ? "all modules" : module}</span>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="card pad">
+      <div className="text-[10px] font-mono uppercase tracking-wider text-text-3 mb-2">
+        Node details
+      </div>
+      <div className="flex flex-wrap items-center gap-1.5 mb-3">
+        <span className="chip id">{node.id}</span>
+        {node.module ? <span className="chip system">{node.module}</span> : null}
+        {node.type ? <span className="chip standard">{node.type}</span> : null}
+      </div>
+      <div className="text-[14px] font-semibold text-text leading-snug mb-1">
+        {node.heading ?? "Untitled requirement"}
+      </div>
+      <dl className="mt-4 grid grid-cols-[auto_1fr] gap-x-3 gap-y-1.5 text-[12px]">
+        <dt className="text-text-3 font-mono uppercase tracking-wider text-[10px] self-center">
+          ID
+        </dt>
+        <dd className="mono text-text-2">{node.id}</dd>
+        <dt className="text-text-3 font-mono uppercase tracking-wider text-[10px] self-center">
+          Module
+        </dt>
+        <dd className="text-text-2">{node.module ?? "—"}</dd>
+        {node.type ? (
+          <>
+            <dt className="text-text-3 font-mono uppercase tracking-wider text-[10px] self-center">
+              Type
+            </dt>
+            <dd className="text-text-2">{node.type}</dd>
+          </>
+        ) : null}
+      </dl>
+    </div>
+  );
+}
+
+function GraphLoading() {
+  return (
+    <div className="h-[520px] flex items-center justify-center">
+      <div className="flex flex-col items-center gap-2 text-[12px] font-mono text-text-3">
+        <div className="animate-pulse w-40 h-2 rounded bg-bg-3" />
+        <span>Fetching graph slice…</span>
+      </div>
+    </div>
+  );
+}
+
+function GraphError({ message }: { message: string }) {
+  return (
+    <div className="h-[520px] p-6 flex flex-col items-center justify-center text-center">
+      <div className="text-[10px] font-mono uppercase tracking-wider text-red mb-2">
+        Graph error
+      </div>
+      <div className="text-[13px] text-text-2 max-w-md">{message}</div>
+    </div>
+  );
+}
+
+function GraphEmpty({ module }: { module: ModuleChoice }) {
+  return (
+    <div className="h-[520px] p-6 flex flex-col items-center justify-center text-center">
+      <div className="text-[10px] font-mono uppercase tracking-wider text-text-3 mb-2">
+        No data
+      </div>
+      <div className="text-[13px] text-text-2 max-w-md">
+        The <span className="mono text-text">graph_slice</span> template returned no
+        requirements for{" "}
+        <span className="mono text-text">
+          {module === "All" ? "the current scope" : module}
+        </span>
+        . Seed the Aura corpus or pick a different module.
+      </div>
+    </div>
   );
 }

@@ -238,29 +238,25 @@ function LoginInner() {
             </div>
           </div>
 
-          {/* Login card — dark glass-morphism terminal floating on light page.
-              Inner `data-theme="dark"` means all tokens (text, line, etc.)
-              inside the card resolve to dark values so content stays readable. */}
-          <div
-            data-theme="dark"
-            className="w-full justify-self-center lg:justify-self-end"
-          >
+          {/* Login card — clean white glass-morphism.
+              No theme override — inherits the page's light theme so every
+              var() inside resolves to the Neo4j-blue / dark-text values. */}
+          <div className="w-full justify-self-center lg:justify-self-end">
             <div
               className="relative rounded-[10px] backdrop-blur-xl"
               style={{
                 background:
-                  "linear-gradient(180deg, rgba(17, 21, 29, 0.95) 0%, rgba(11, 14, 19, 0.98) 100%)",
-                border: "1px solid rgba(46, 56, 73, 0.8)",
+                  "linear-gradient(180deg, rgba(255, 255, 255, 0.98) 0%, rgba(248, 250, 253, 1) 100%)",
+                border: "1px solid rgba(15, 20, 32, 0.1)",
                 boxShadow:
-                  "0 24px 60px rgba(15, 20, 32, 0.18), 0 0 0 1px rgba(255, 255, 255, 0.02) inset",
+                  "0 24px 60px rgba(15, 20, 32, 0.1), 0 1px 0 rgba(255, 255, 255, 0.8) inset",
               }}
             >
               <div
                 className="pointer-events-none absolute inset-0 rounded-[10px]"
                 style={{
                   background:
-                    "linear-gradient(135deg, rgba(255, 176, 32, 0.12), transparent 30%, transparent 70%, rgba(79, 209, 197, 0.1))",
-                  mixBlendMode: "screen",
+                    "linear-gradient(135deg, rgba(0, 82, 204, 0.04), transparent 30%, transparent 70%, rgba(6, 148, 162, 0.04))",
                 }}
               />
 
@@ -425,9 +421,9 @@ function LoginInner() {
                       className="group mt-2 flex h-11 w-full items-center justify-center gap-2 rounded-[6px] font-semibold tracking-tight transition-all disabled:opacity-60"
                       style={{
                         background: "var(--accent)",
-                        color: "#000",
+                        color: "#fff",
                         boxShadow:
-                          "0 8px 24px rgba(255, 176, 32, 0.25), 0 0 0 1px rgba(255, 176, 32, 0.4)",
+                          "0 8px 24px rgba(0, 82, 204, 0.22), 0 0 0 1px rgba(0, 82, 204, 0.35)",
                       }}
                       onMouseEnter={(e) => {
                         if (!submitting)
@@ -482,7 +478,7 @@ function LoginInner() {
                 className="relative flex items-center justify-between rounded-b-[10px] px-8 py-3 font-mono text-[10px] uppercase tracking-[0.18em]"
                 style={{
                   borderTop: "1px solid var(--line)",
-                  background: "rgba(11, 14, 19, 0.6)",
+                  background: "rgba(248, 250, 253, 0.9)",
                   color: "var(--text-3)",
                 }}
               >

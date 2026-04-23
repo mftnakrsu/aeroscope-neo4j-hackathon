@@ -5,12 +5,13 @@ import { TabHeader } from "@/components/dashboard/TabHeader";
 import { RequirementCard, type RequirementRow } from "@/components/dashboard/RequirementCard";
 import { SkeletonCardList } from "@/components/dashboard/SkeletonCard";
 import { runQuery, ApiError, type QueryRow } from "@/lib/api-client";
-import { PLATFORMS } from "@/lib/platforms";
+import { MODULES } from "@/lib/modules";
 
 const PAGE_SIZE = 10;
+const ALL = "__all__";
 
 export default function RequirementsTab() {
-  const [platform, setPlatform] = useState<string>(PLATFORMS[0].name);
+  const [module, setModule] = useState<string>(ALL);
   const [rows, setRows] = useState<RequirementRow[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [page, setPage] = useState(1);
@@ -21,12 +22,15 @@ export default function RequirementsTab() {
     setError(null);
     setPage(1);
 
+    const params: Record<string, unknown> = { limit: 50 };
+    if (module !== ALL) {
+      params.module_name = module;
+    }
+
     runQuery(
       {
-        template_id: "platform_requirements",
-        // NB: the underlying Cypher template's param is `platform_name`;
-        // we send both so either server-side normalisation works.
-        params: { platform_name: platform, platform, limit: 50 },
+        template_id: "all_requirements",
+        params,
       },
       { signal: controller.signal },
     )
@@ -47,7 +51,7 @@ export default function RequirementsTab() {
       });
 
     return () => controller.abort();
-  }, [platform]);
+  }, [module]);
 
   const totalPages = useMemo(() => {
     if (!rows) return 1;
@@ -60,26 +64,30 @@ export default function RequirementsTab() {
     return rows.slice(start, start + PAGE_SIZE);
   }, [rows, page]);
 
+  const scopeLabel =
+    module === ALL ? "all modules" : `the ${module} module`;
+
   return (
     <>
       <TabHeader
         title="Requirements"
         crumbs={[{ label: "Analysis" }, { label: "Requirements" }]}
-        subtitle={`Browse requirements allocated to ${platform}. Filter by platform to scope the corpus.`}
+        subtitle={`Browse requirements across ${scopeLabel}. Filter by module to scope the corpus.`}
         actions={
           <>
-            <label className="sr-only" htmlFor="platform-filter">
-              Platform
+            <label className="sr-only" htmlFor="module-filter">
+              Module
             </label>
             <select
-              id="platform-filter"
-              value={platform}
-              onChange={(event) => setPlatform(event.target.value)}
-              className="input h-8 text-[12px] w-auto min-w-[160px]"
+              id="module-filter"
+              value={module}
+              onChange={(event) => setModule(event.target.value)}
+              className="input h-8 text-[12px] w-auto min-w-[200px]"
             >
-              {PLATFORMS.map((p) => (
-                <option key={p.code} value={p.name}>
-                  {p.name} — {p.role}
+              <option value={ALL}>All modules (loaded)</option>
+              {MODULES.map((m) => (
+                <option key={m.code} value={m.code}>
+                  {m.name} — {m.role}
                 </option>
               ))}
             </select>
@@ -95,7 +103,7 @@ export default function RequirementsTab() {
       ) : error && rows.length === 0 ? (
         <ErrorState message={error} />
       ) : rows.length === 0 ? (
-        <EmptyState platform={platform} />
+        <EmptyState scopeLabel={scopeLabel} />
       ) : (
         <>
           <div className="grid grid-cols-1 gap-3">
@@ -158,15 +166,17 @@ function Pagination({
   );
 }
 
-function EmptyState({ platform }: { platform: string }) {
+function EmptyState({ scopeLabel }: { scopeLabel: string }) {
   return (
     <div className="card pad text-center text-text-2">
       <div className="text-[11px] font-mono uppercase tracking-wider text-text-3 mb-2">
         No results
       </div>
       <div className="text-sm">
-        No requirements returned for <span className="mono text-text">{platform}</span>.
-        The corpus may not be seeded yet, or the allocation for this platform is empty.
+        No requirements returned for{" "}
+        <span className="mono text-text">{scopeLabel}</span>. The module may
+        not be loaded into Aura yet — run <span className="mono">make load</span>{" "}
+        after generating more synthetic corpus.
       </div>
     </div>
   );

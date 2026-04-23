@@ -1,0 +1,22 @@
+{
+  "name": "all_requirements",
+  "description": "Returns a paginated slice of requirements across the corpus, optionally filtered by module. Designed for the dashboard's default Requirements tab view when no specific analytical question has been asked yet — just 'show me what's in the graph'. Returns module, id, heading, object_type, level, and verification status so the card component can render a full requirement summary without a second round-trip.",
+  "when_to_use": "Fire this when the user wants to browse the corpus without a platform / standard / impact anchor. Natural phrasings: 'show me the requirements', 'list all requirements', 'what's in FCC', 'browse the corpus'. For platform-filtered views use platform_requirements. For module-level health use module_coverage.",
+  "parameters": [
+    {
+      "name": "module_name",
+      "description": "Optional module filter. If provided, only requirements whose module property matches are returned. Pass null or omit to return across all modules. Expected values today: FCC, FMS, AUTO, GPS, INS (5 loaded modules, 284 total requirements).",
+      "required": false,
+      "type": "string"
+    },
+    {
+      "name": "limit",
+      "description": "Maximum number of requirements to return. Keep small for snappy UI (default 50).",
+      "required": false,
+      "type": "integer"
+    }
+  ],
+  "cypher": "MATCH (r:Requirement)\nWHERE ($module_name IS NULL OR r.module = $module_name)\n  AND (r.object_type IS NULL OR r.object_type = 'Requirement')\nOPTIONAL MATCH (r)-[:VERIFIED_BY]->(t:TestProcedure)\nWITH r, count(DISTINCT t) AS test_count\nRETURN r.id                     AS requirement_id,\n       r.module                 AS module,\n       r.heading                AS heading,\n       r.text                   AS text,\n       r.object_type            AS object_type,\n       r.level                  AS level,\n       r.platform               AS platform,\n       r.priority               AS priority,\n       r.status                 AS status,\n       r.safety_classification  AS dal,\n       r.compliance_standard    AS standard,\n       CASE WHEN test_count > 0 THEN 'COVERED' ELSE 'GAP' END AS verification_status\nORDER BY r.module, r.id\nLIMIT toInteger(coalesce($limit, 50))",
+  "limit": 50,
+  "notes": "This is the 'default feed' template — no analytical reasoning, just corpus browsing. The two-part WHERE handles the null-module-filter case without needing a separate untagged Cypher. The filter on object_type excludes Heading and Table rows that slipped in during parsing, so the card list stays clean. When platform_requirements returns empty (the graph lacks explicit Platform nodes or per-requirement ALLOCATED_TO edges), fall back to this template with a module filter."
+}
