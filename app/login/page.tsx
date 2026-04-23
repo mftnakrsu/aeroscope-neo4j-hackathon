@@ -14,25 +14,25 @@ import {
 } from "../../components/icons";
 import { createClient } from "@/utils/supabase/client";
 
+type Mode = "signin" | "signup";
+
 function LoginInner() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const supabase = createClient();
   const nextPath = searchParams.get("next") || "/dashboard";
-  const initialError = searchParams.get("error");
 
+  const [mode, setMode] = useState<Mode>("signin");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
-  const [error, setError] = useState<string | null>(
-    initialError === "auth_callback_failed"
-      ? "Google sign-in was cancelled or failed. Please try again."
-      : null,
-  );
+  const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
-  const [googleLoading, setGoogleLoading] = useState(false);
+  const [confirmationSent, setConfirmationSent] = useState(false);
 
-  async function handleEmailSignIn(e: FormEvent<HTMLFormElement>) {
+  const isSignup = mode === "signup";
+
+  async function handleSubmit(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
     if (submitting) return;
 
@@ -40,50 +40,64 @@ function LoginInner() {
     setSubmitting(true);
 
     try {
-      const { error: signInError } = await supabase.auth.signInWithPassword({
+      if (!isSignup) {
+        const { error: signInError } = await supabase.auth.signInWithPassword({
+          email,
+          password,
+        });
+        if (signInError) {
+          setError(signInError.message || "Unable to sign in.");
+          setSubmitting(false);
+          return;
+        }
+        router.push(nextPath);
+        router.refresh();
+        return;
+      }
+
+      // Sign-up path.
+      const { data, error: signUpError } = await supabase.auth.signUp({
         email,
         password,
+        options: {
+          emailRedirectTo: `${window.location.origin}/auth/callback?next=${encodeURIComponent(nextPath)}`,
+        },
       });
-      if (signInError) {
-        setError(signInError.message || "Unable to sign in.");
+      if (signUpError) {
+        setError(signUpError.message || "Unable to create account.");
         setSubmitting(false);
         return;
       }
-      router.push(nextPath);
-      router.refresh();
+
+      // If Supabase returned a session, email confirmation is disabled and
+      // the user is signed in immediately. Otherwise, tell them to check
+      // their inbox — the link in the confirmation email hits /auth/callback
+      // and completes the sign-in.
+      if (data.session) {
+        router.push(nextPath);
+        router.refresh();
+      } else {
+        setConfirmationSent(true);
+        setSubmitting(false);
+      }
     } catch {
       setError("Network error. Please try again.");
       setSubmitting(false);
     }
   }
 
-  async function handleGoogleSignIn() {
-    if (googleLoading) return;
+  function toggleMode() {
+    setMode(isSignup ? "signin" : "signup");
     setError(null);
-    setGoogleLoading(true);
-
-    try {
-      const { error: oauthError } = await supabase.auth.signInWithOAuth({
-        provider: "google",
-        options: {
-          redirectTo: `${window.location.origin}/auth/callback?next=${encodeURIComponent(nextPath)}`,
-        },
-      });
-      if (oauthError) {
-        setError(oauthError.message || "Google sign-in failed.");
-        setGoogleLoading(false);
-      }
-      // On success, Supabase will handle redirect to Google.
-    } catch {
-      setError("Network error. Please try again.");
-      setGoogleLoading(false);
-    }
+    setConfirmationSent(false);
   }
 
   return (
-    <main data-theme="dark" className="relative min-h-screen overflow-hidden bg-bg text-text">
+    <main
+      data-theme="dark"
+      className="relative min-h-screen overflow-hidden bg-bg text-text"
+    >
       {/* ========= Ambient background layers ========= */}
-      {/* Radial base wash */}
       <div
         className="pointer-events-none absolute inset-0"
         style={{
@@ -92,7 +106,6 @@ function LoginInner() {
         }}
       />
 
-      {/* Flight path overlay — full-page foreground */}
       <div
         className="pointer-events-none absolute inset-0"
         style={{ opacity: 0.85 }}
@@ -100,7 +113,6 @@ function LoginInner() {
         <FlightPath className="h-full w-full" />
       </div>
 
-      {/* Radar scope — ambient, anchored left ~40% */}
       <div
         className="pointer-events-none absolute"
         style={{
@@ -115,7 +127,6 @@ function LoginInner() {
         <RadarScope className="h-full w-full" />
       </div>
 
-      {/* Fine grid overlay for texture */}
       <div
         className="pointer-events-none absolute inset-0"
         style={{
@@ -239,7 +250,6 @@ function LoginInner() {
                   "0 30px 80px rgba(0, 0, 0, 0.55), 0 0 0 1px rgba(255, 255, 255, 0.02) inset, 0 0 60px rgba(255, 176, 32, 0.05)",
               }}
             >
-              {/* Card inner border accent */}
               <div
                 className="pointer-events-none absolute inset-0 rounded-[10px]"
                 style={{
@@ -250,23 +260,24 @@ function LoginInner() {
               />
 
               <div className="relative p-8">
-                {/* Card header */}
                 <div className="mb-7 flex items-start justify-between">
                   <div>
                     <div
                       className="mb-2 font-mono text-[10px] uppercase tracking-[0.2em]"
                       style={{ color: "var(--accent)" }}
                     >
-                      Access Required
+                      {isSignup ? "Create Access" : "Access Required"}
                     </div>
                     <h2 className="text-[22px] font-semibold tracking-tight text-text">
-                      Sign in to console
+                      {isSignup ? "Create account" : "Sign in to console"}
                     </h2>
                     <p
                       className="mt-1.5 text-[13px]"
                       style={{ color: "var(--text-2)" }}
                     >
-                      Continue with email or Google.
+                      {isSignup
+                        ? "Use an email and a password of at least 6 characters."
+                        : "Enter your email and password to continue."}
                     </p>
                   </div>
                   <div
@@ -277,194 +288,191 @@ function LoginInner() {
                   </div>
                 </div>
 
-                <form onSubmit={handleEmailSignIn} noValidate>
-                  {/* Email field */}
-                  <label className="mb-4 block">
-                    <span
-                      className="mb-1.5 block font-mono text-[10px] uppercase tracking-[0.18em]"
-                      style={{ color: "var(--text-3)" }}
-                    >
-                      Email
-                    </span>
-                    <div className="relative">
-                      <span
-                        className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2"
-                        style={{ color: "var(--text-3)" }}
-                      >
-                        <UserIcon width={16} height={16} />
-                      </span>
-                      <input
-                        type="email"
-                        autoComplete="email"
-                        value={email}
-                        onChange={(e) => setEmail(e.target.value)}
-                        placeholder="you@example.com"
-                        className="input"
-                        style={{ paddingLeft: 36 }}
-                        required
-                      />
-                    </div>
-                  </label>
-
-                  {/* Password field */}
-                  <label className="mb-3 block">
-                    <span
-                      className="mb-1.5 block font-mono text-[10px] uppercase tracking-[0.18em]"
-                      style={{ color: "var(--text-3)" }}
-                    >
-                      Password
-                    </span>
-                    <div className="relative">
-                      <span
-                        className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2"
-                        style={{ color: "var(--text-3)" }}
-                      >
-                        <LockIcon width={16} height={16} />
-                      </span>
-                      <input
-                        type={showPassword ? "text" : "password"}
-                        autoComplete="current-password"
-                        value={password}
-                        onChange={(e) => setPassword(e.target.value)}
-                        placeholder="••••••••"
-                        className="input"
-                        style={{ paddingLeft: 36, paddingRight: 40 }}
-                        required
-                      />
-                      <button
-                        type="button"
-                        onClick={() => setShowPassword((s) => !s)}
-                        aria-label={
-                          showPassword ? "Hide password" : "Show password"
-                        }
-                        className="absolute right-2 top-1/2 grid h-7 w-7 -translate-y-1/2 place-items-center rounded-[4px] transition-colors"
-                        style={{ color: "var(--text-3)" }}
-                        onMouseEnter={(e) =>
-                          (e.currentTarget.style.color = "var(--text)")
-                        }
-                        onMouseLeave={(e) =>
-                          (e.currentTarget.style.color = "var(--text-3)")
-                        }
-                      >
-                        <EyeIcon width={16} height={16} off={showPassword} />
-                      </button>
-                    </div>
-                  </label>
-
-                  {/* Inline error */}
-                  {error && (
-                    <div
-                      role="alert"
-                      className="mb-3 flex items-center gap-2 rounded-[6px] px-3 py-2 text-[12.5px]"
-                      style={{
-                        background: "rgba(255, 107, 107, 0.08)",
-                        border: "1px solid rgba(255, 107, 107, 0.3)",
-                        color: "var(--red)",
-                      }}
-                    >
+                {confirmationSent ? (
+                  <div
+                    role="status"
+                    className="flex flex-col gap-3 rounded-[8px] px-4 py-4 text-[13px]"
+                    style={{
+                      background: "rgba(79, 209, 197, 0.08)",
+                      border: "1px solid rgba(79, 209, 197, 0.3)",
+                      color: "var(--cyan)",
+                    }}
+                  >
+                    <div className="flex items-center gap-2 font-mono text-[10px] uppercase tracking-[0.18em]">
                       <span
                         className="inline-block h-1.5 w-1.5 rounded-full"
-                        style={{ background: "var(--red)" }}
+                        style={{
+                          background: "var(--cyan)",
+                          animation: "pulse 2s ease-in-out infinite",
+                        }}
                       />
-                      {error}
+                      Confirmation sent
                     </div>
-                  )}
+                    <div style={{ color: "var(--text)" }}>
+                      Check <span className="font-mono">{email}</span> for the
+                      sign-in link. Clicking it will bring you straight to the
+                      console.
+                    </div>
+                    <button
+                      type="button"
+                      onClick={toggleMode}
+                      className="self-start text-[12px] underline decoration-dotted underline-offset-4"
+                      style={{ color: "var(--text-2)" }}
+                    >
+                      Back to sign in
+                    </button>
+                  </div>
+                ) : (
+                  <form onSubmit={handleSubmit} noValidate>
+                    <label className="mb-4 block">
+                      <span
+                        className="mb-1.5 block font-mono text-[10px] uppercase tracking-[0.18em]"
+                        style={{ color: "var(--text-3)" }}
+                      >
+                        Email
+                      </span>
+                      <div className="relative">
+                        <span
+                          className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2"
+                          style={{ color: "var(--text-3)" }}
+                        >
+                          <UserIcon width={16} height={16} />
+                        </span>
+                        <input
+                          type="email"
+                          autoComplete="email"
+                          value={email}
+                          onChange={(e) => setEmail(e.target.value)}
+                          placeholder="you@example.com"
+                          className="input"
+                          style={{ paddingLeft: 36 }}
+                          required
+                        />
+                      </div>
+                    </label>
 
-                  {/* Submit */}
-                  <button
-                    type="submit"
-                    disabled={submitting}
-                    className="group mt-2 flex h-11 w-full items-center justify-center gap-2 rounded-[6px] font-semibold tracking-tight transition-all disabled:opacity-60"
-                    style={{
-                      background: "var(--accent)",
-                      color: "#000",
-                      boxShadow:
-                        "0 8px 24px rgba(255, 176, 32, 0.25), 0 0 0 1px rgba(255, 176, 32, 0.4)",
-                    }}
-                    onMouseEnter={(e) => {
-                      if (!submitting)
-                        e.currentTarget.style.background = "var(--accent-2)";
-                    }}
-                    onMouseLeave={(e) => {
-                      if (!submitting)
-                        e.currentTarget.style.background = "var(--accent)";
-                    }}
-                  >
-                    <span>
-                      {submitting ? "Authorizing…" : "Enter console"}
-                    </span>
-                    {!submitting && (
-                      <ArrowRightIcon
-                        width={18}
-                        height={18}
-                        className="transition-transform group-hover:translate-x-0.5"
-                      />
+                    <label className="mb-3 block">
+                      <span
+                        className="mb-1.5 block font-mono text-[10px] uppercase tracking-[0.18em]"
+                        style={{ color: "var(--text-3)" }}
+                      >
+                        Password
+                      </span>
+                      <div className="relative">
+                        <span
+                          className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2"
+                          style={{ color: "var(--text-3)" }}
+                        >
+                          <LockIcon width={16} height={16} />
+                        </span>
+                        <input
+                          type={showPassword ? "text" : "password"}
+                          autoComplete={isSignup ? "new-password" : "current-password"}
+                          value={password}
+                          onChange={(e) => setPassword(e.target.value)}
+                          placeholder="••••••••"
+                          className="input"
+                          style={{ paddingLeft: 36, paddingRight: 40 }}
+                          minLength={6}
+                          required
+                        />
+                        <button
+                          type="button"
+                          onClick={() => setShowPassword((s) => !s)}
+                          aria-label={
+                            showPassword ? "Hide password" : "Show password"
+                          }
+                          className="absolute right-2 top-1/2 grid h-7 w-7 -translate-y-1/2 place-items-center rounded-[4px] transition-colors"
+                          style={{ color: "var(--text-3)" }}
+                          onMouseEnter={(e) =>
+                            (e.currentTarget.style.color = "var(--text)")
+                          }
+                          onMouseLeave={(e) =>
+                            (e.currentTarget.style.color = "var(--text-3)")
+                          }
+                        >
+                          <EyeIcon width={16} height={16} off={showPassword} />
+                        </button>
+                      </div>
+                    </label>
+
+                    {error && (
+                      <div
+                        role="alert"
+                        className="mb-3 flex items-center gap-2 rounded-[6px] px-3 py-2 text-[12.5px]"
+                        style={{
+                          background: "rgba(255, 107, 107, 0.08)",
+                          border: "1px solid rgba(255, 107, 107, 0.3)",
+                          color: "var(--red)",
+                        }}
+                      >
+                        <span
+                          className="inline-block h-1.5 w-1.5 rounded-full"
+                          style={{ background: "var(--red)" }}
+                        />
+                        {error}
+                      </div>
                     )}
-                  </button>
-                </form>
 
-                {/* Divider */}
-                <div className="my-5 flex items-center gap-3">
-                  <div
-                    className="h-px flex-1"
-                    style={{ background: "var(--line)" }}
-                  />
-                  <span
-                    className="font-mono text-[10px] uppercase tracking-[0.2em]"
-                    style={{ color: "var(--text-4)" }}
-                  >
-                    or
-                  </span>
-                  <div
-                    className="h-px flex-1"
-                    style={{ background: "var(--line)" }}
-                  />
-                </div>
+                    <button
+                      type="submit"
+                      disabled={submitting}
+                      className="group mt-2 flex h-11 w-full items-center justify-center gap-2 rounded-[6px] font-semibold tracking-tight transition-all disabled:opacity-60"
+                      style={{
+                        background: "var(--accent)",
+                        color: "#000",
+                        boxShadow:
+                          "0 8px 24px rgba(255, 176, 32, 0.25), 0 0 0 1px rgba(255, 176, 32, 0.4)",
+                      }}
+                      onMouseEnter={(e) => {
+                        if (!submitting)
+                          e.currentTarget.style.background = "var(--accent-2)";
+                      }}
+                      onMouseLeave={(e) => {
+                        if (!submitting)
+                          e.currentTarget.style.background = "var(--accent)";
+                      }}
+                    >
+                      <span>
+                        {submitting
+                          ? isSignup
+                            ? "Creating account…"
+                            : "Authorizing…"
+                          : isSignup
+                            ? "Create account"
+                            : "Enter console"}
+                      </span>
+                      {!submitting && (
+                        <ArrowRightIcon
+                          width={18}
+                          height={18}
+                          className="transition-transform group-hover:translate-x-0.5"
+                        />
+                      )}
+                    </button>
 
-                {/* Google OAuth button */}
-                <button
-                  type="button"
-                  onClick={handleGoogleSignIn}
-                  disabled={googleLoading}
-                  className="flex h-11 w-full items-center justify-center gap-2.5 rounded-[6px] font-medium tracking-tight transition-all disabled:opacity-60"
-                  style={{
-                    background: "var(--bg-2)",
-                    color: "var(--text)",
-                    border: "1px solid var(--line-2)",
-                  }}
-                  onMouseEnter={(e) => {
-                    if (!googleLoading)
-                      e.currentTarget.style.background = "var(--bg-hover)";
-                  }}
-                  onMouseLeave={(e) => {
-                    if (!googleLoading)
-                      e.currentTarget.style.background = "var(--bg-2)";
-                  }}
-                >
-                  <GoogleGlyph />
-                  <span>
-                    {googleLoading ? "Redirecting…" : "Continue with Google"}
-                  </span>
-                </button>
-
-                {/* Helper text */}
-                <div className="mt-5 flex items-center justify-between">
-                  <div
-                    className="font-mono text-[11px]"
-                    style={{ color: "var(--text-3)" }}
-                  >
-                    New here? Google creates your account automatically.
-                  </div>
-                  <div
-                    className="font-mono text-[10px] uppercase tracking-[0.15em]"
-                    style={{ color: "var(--text-4)" }}
-                  >
-                    TLS 1.3
-                  </div>
-                </div>
+                    <div className="mt-5 flex items-center justify-between">
+                      <button
+                        type="button"
+                        onClick={toggleMode}
+                        className="font-mono text-[11px] underline decoration-dotted underline-offset-4"
+                        style={{ color: "var(--text-2)" }}
+                      >
+                        {isSignup
+                          ? "Already have an account? Sign in"
+                          : "Need an account? Create one"}
+                      </button>
+                      <div
+                        className="font-mono text-[10px] uppercase tracking-[0.15em]"
+                        style={{ color: "var(--text-4)" }}
+                      >
+                        TLS 1.3
+                      </div>
+                    </div>
+                  </form>
+                )}
               </div>
 
-              {/* Card footer strip */}
               <div
                 className="relative flex items-center justify-between rounded-b-[10px] px-8 py-3 font-mono text-[10px] uppercase tracking-[0.18em]"
                 style={{
@@ -508,30 +516,6 @@ function LoginInner() {
         </div>
       </footer>
     </main>
-  );
-}
-
-// Official Google "G" mark. SVG from Google's brand guidelines; 4-color.
-function GoogleGlyph() {
-  return (
-    <svg width="18" height="18" viewBox="0 0 48 48" aria-hidden="true">
-      <path
-        fill="#FFC107"
-        d="M43.6 20.5H42V20.4H24v7.2h11.3c-1.5 4.2-5.5 7.2-10.3 7.2-6 0-10.8-4.8-10.8-10.8S18.9 13.2 24.9 13.2c2.7 0 5.2 1 7.1 2.8l5.1-5.1C33.8 7.9 29.6 6 25.1 6 14.6 6 6 14.6 6 25.1s8.6 19.1 19.1 19.1c10.6 0 19.1-8.6 19.1-19.1 0-1.6-.2-3.1-.6-4.6z"
-      />
-      <path
-        fill="#FF3D00"
-        d="M8.3 14.4l6 4.4c1.6-3.9 5.4-6.6 9.8-6.6 2.7 0 5.2 1 7.1 2.8l5.1-5.1C33.8 7.9 29.6 6 25.1 6 17.8 6 11.5 10 8.3 14.4z"
-      />
-      <path
-        fill="#4CAF50"
-        d="M25.1 44.2c5.4 0 10.2-2 13.8-5.4l-6.4-5.4c-1.9 1.4-4.4 2.2-7.4 2.2-4.8 0-8.9-3-10.3-7.2l-6 4.6c2.8 5.5 8.8 9.2 16.3 9.2z"
-      />
-      <path
-        fill="#1976D2"
-        d="M43.6 20.5H42V20.4H24v7.2h11.3c-.7 2-2.1 3.8-3.9 5l.1.1 6.4 5.4c-.4.4 7.1-5.2 7.1-13 0-1.6-.2-3.1-.6-4.6z"
-      />
-    </svg>
   );
 }
 
