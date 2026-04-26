@@ -9,9 +9,82 @@ import {
 } from "@/lib/templates";
 
 export const runtime = "nodejs";
-export const maxDuration = 20;
+export const maxDuration = 30;
 
 const QUERY_TIMEOUT_MS = 15_000;
+const LLM_TIMEOUT_MS = 20_000;
+
+// System prompt for Text2Cypher. Pinned to AeroScope's actual schema +
+// few-shot examples so the model emits queries that fit the data, with a
+// hard read-only guarantee enforced both in the prompt and in code.
+const TEXT2CYPHER_SYSTEM_PROMPT = `You are a Neo4j Cypher query generator for the AeroScope aerospace requirements graph. Translate the user's natural-language question into ONE valid, READ-ONLY Cypher query. Output ONLY the Cypher — no explanation, no markdown fences, no prose.
+
+GRAPH SCHEMA
+
+Node labels:
+- Requirement {id, module, heading, text, full_text, object_type, level, has_ole, has_parameters, priority?, status?, verification_method?, safety_classification?, allocated_subsystem?, platform?, rationale?, compliance_standard?, performance_target?, test_procedure?, baseline?, project?}
+- Module {name, path}
+- Parameter {name}
+
+Relationships (all directional, all between Requirement nodes unless noted):
+- (Module)-[:CONTAINS]->(Requirement)
+- (Requirement)-[:NEXT]->(Requirement)             // document order within a module
+- (Requirement)-[:SATISFIES]->(Requirement)
+- (Requirement)-[:DERIVES_FROM]->(Requirement)
+- (Requirement)-[:VERIFIES]->(Requirement)
+- (Requirement)-[:REFERENCES]->(Requirement)
+- (Requirement)-[:REFINES]->(Requirement)
+- (Requirement)-[:COVERS]->(Requirement)
+- (Requirement)-[:DEPENDS_ON]->(Requirement)
+- (Requirement)-[:CONFLICTS_WITH]->(Requirement)
+- (Requirement)-[:IMPLEMENTS]->(Requirement)
+- (Requirement)-[:ALLOCATED_TO]->(Requirement)
+- (Requirement)-[:USES_PARAMETER]->(Parameter)
+
+DOMAIN: Aerospace requirements traceability for the fictional company AeroSys Dynamics. 30 modules including FCC, FMS, AUTO, NAV, INS, GPS, ADS, COMM, RADAR, SAR, EOIR, GCS, HMI, PWR, EPS, ENG, FUEL, LDG, STR, SEC, BIT, FDR, EMS, TCS, ICE, LGT, PLD, APM, CDL, DLNK. Four UAV platforms: Stratos-7, AeroLynx-X2, Skyrunner-T1, Nimbus-C3.
+
+RULES
+1. READ-ONLY ONLY: never use CREATE, DELETE, SET, MERGE, REMOVE, DROP, FOREACH, LOAD CSV, or any write CALL procedure.
+2. Always include a LIMIT (max 50) at the end.
+3. Use case-insensitive regex for free-text matches: r.full_text =~ '(?i).*pattern.*'
+4. For "impact" / "what depends on" / "what breaks if" — traverse SATISFIES, DERIVES_FROM, REFINES (and their reverse) with hops 1..3.
+5. Always return useful columns including requirement_id, module, heading, text where applicable.
+6. Emit ONE statement only — no semicolons separating multiple queries.
+
+EXAMPLES
+
+Q: Show me requirements in the FCC module
+A:
+MATCH (r:Requirement)
+WHERE r.module = 'FCC' AND r.object_type = 'Requirement'
+RETURN r.id AS requirement_id, r.module AS module, r.heading AS heading, r.text AS text
+ORDER BY r.id
+LIMIT 50
+
+Q: Which requirements depend on the 28V undervoltage threshold?
+A:
+MATCH (anchor:Requirement)
+WHERE anchor.full_text =~ '(?i).*28\\\\s*V.*undervolt.*'
+OPTIONAL MATCH (dep:Requirement)-[:DERIVES_FROM|SATISFIES|DEPENDS_ON|REFINES*1..3]->(anchor)
+WITH anchor, dep WHERE dep IS NOT NULL
+RETURN DISTINCT anchor.id AS anchor_id, dep.id AS dependent_id, dep.module AS dependent_module, dep.heading AS heading, dep.text AS text
+LIMIT 50
+
+Q: What are orphan requirements with no upstream or downstream trace?
+A:
+MATCH (r:Requirement)
+WHERE r.object_type = 'Requirement'
+  AND NOT (r)<-[:SATISFIES|DERIVES_FROM|REFINES|VERIFIES]-()
+  AND NOT (r)-[:SATISFIES|DERIVES_FROM|REFINES|VERIFIES]->()
+RETURN r.id AS requirement_id, r.module AS module, r.heading AS heading, r.text AS text
+ORDER BY r.module, r.id
+LIMIT 50
+
+Q: How is FCC-042 related to PWR-033?
+A:
+MATCH p = shortestPath((a:Requirement {id: 'FCC-042'})-[*..6]-(b:Requirement {id: 'PWR-033'}))
+RETURN [n IN nodes(p) | n.id] AS path_ids, [r IN relationships(p) | type(r)] AS path_types, length(p) AS hops
+LIMIT 1`;
 
 interface QueryRequestBody {
   template_id?: string | null;
@@ -179,17 +252,14 @@ export async function POST(req: NextRequest) {
       ? (body.params as Record<string, unknown>)
       : {};
 
-  // Text2Cypher fallback — explicitly not wired yet.
+  // Text2Cypher path — generate Cypher with the LLM, then run it read-only.
   if (!templateId) {
     if (typeof body.question === "string" && body.question.trim()) {
-      return errorResponse(
-        "Text2Cypher not yet wired. Provide template_id.",
-        501
-      );
+      return await handleText2Cypher(body.question.trim(), startedAt);
     }
     return errorResponse(
       "Either template_id or question is required.",
-      400
+      400,
     );
   }
 
@@ -289,6 +359,194 @@ export async function POST(req: NextRequest) {
       await session.close();
     } catch {
       // Session cleanup failures are non-fatal for the response.
+    }
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Text2Cypher: ask the LLM for Cypher, validate it's read-only, run it.
+// ---------------------------------------------------------------------------
+
+const WRITE_KEYWORDS_RE =
+  /\b(CREATE|DELETE|DETACH\s+DELETE|SET|MERGE|REMOVE|DROP|FOREACH|LOAD\s+CSV|CALL\s+(?:db|dbms|apoc\.create|apoc\.refactor|apoc\.merge|apoc\.delete|apoc\.do))\b/i;
+
+function isReadOnlyCypher(cypher: string): boolean {
+  return !WRITE_KEYWORDS_RE.test(cypher);
+}
+
+function stripCodeFences(text: string): string {
+  return text
+    .replace(/^\s*```(?:cypher|sql|neo4j)?\s*\n?/i, "")
+    .replace(/\n?```\s*$/i, "")
+    .trim();
+}
+
+async function generateCypher(question: string): Promise<string> {
+  const rawBase = process.env.OPENAI_BASE_URL?.trim();
+  const apiKey = process.env.OPENAI_API_KEY?.trim();
+  const model = process.env.OPENAI_MODEL?.trim() || "gpt-4o-mini";
+
+  if (!rawBase || !apiKey) {
+    throw new Error(
+      "Text2Cypher not configured on the server. Set OPENAI_BASE_URL, OPENAI_API_KEY, and OPENAI_MODEL in Vercel.",
+    );
+  }
+
+  // Tolerate users setting OPENAI_BASE_URL with /responses or trailing slash.
+  const baseURL = rawBase
+    .replace(/\/responses\/?$/i, "")
+    .replace(/\/+$/, "");
+
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), LLM_TIMEOUT_MS);
+
+  let response: Response;
+  try {
+    response = await fetch(`${baseURL}/chat/completions`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        // Bearer for OpenAI / OpenAI-compat; api-key for Azure-style auth.
+        // Sending both is harmless and maximises endpoint coverage.
+        Authorization: `Bearer ${apiKey}`,
+        "api-key": apiKey,
+      },
+      body: JSON.stringify({
+        model,
+        messages: [
+          { role: "system", content: TEXT2CYPHER_SYSTEM_PROMPT },
+          { role: "user", content: question },
+        ],
+        temperature: 0.1,
+        max_tokens: 800,
+      }),
+      signal: controller.signal,
+    });
+  } catch (err) {
+    if (err instanceof Error && err.name === "AbortError") {
+      throw new Error("LLM request timed out after 20s.");
+    }
+    throw err instanceof Error ? err : new Error(String(err));
+  } finally {
+    clearTimeout(timer);
+  }
+
+  if (!response.ok) {
+    const body = await response.text();
+    const trimmed = body.length > 300 ? body.slice(0, 300) + "…" : body;
+    throw new Error(`LLM call failed (${response.status}): ${trimmed}`);
+  }
+
+  const data = (await response.json()) as {
+    choices?: Array<{ message?: { content?: string } }>;
+    output_text?: string;
+    output?: Array<{ content?: Array<{ text?: string }> }>;
+  };
+
+  const raw =
+    data.choices?.[0]?.message?.content ??
+    data.output_text ??
+    data.output?.[0]?.content?.[0]?.text ??
+    "";
+
+  const cleaned = stripCodeFences(raw);
+  if (!cleaned) {
+    throw new Error("LLM returned an empty response.");
+  }
+  return cleaned;
+}
+
+async function handleText2Cypher(
+  question: string,
+  startedAt: number,
+): Promise<NextResponse> {
+  let cypher: string;
+  try {
+    cypher = await generateCypher(question);
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : "LLM call failed.";
+    return errorResponse(msg, 502, {
+      template: { id: "text2cypher", name: "Natural Language" },
+      elapsed_ms: Date.now() - startedAt,
+    });
+  }
+
+  if (!isReadOnlyCypher(cypher)) {
+    return errorResponse(
+      "The generated Cypher contained write keywords and was rejected for safety. Re-phrase the question or use a Cypher Template.",
+      400,
+      {
+        template: { id: "text2cypher", name: "Natural Language" },
+        cypher,
+        elapsed_ms: Date.now() - startedAt,
+      },
+    );
+  }
+
+  let driver;
+  try {
+    driver = getDriver();
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : "Neo4j init failed.";
+    return errorResponse(msg, 500, {
+      template: { id: "text2cypher", name: "Natural Language" },
+      cypher,
+    });
+  }
+
+  const databaseName = process.env.NEO4J_DATABASE?.trim();
+  const session = driver.session({
+    ...(databaseName ? { database: databaseName } : {}),
+    defaultAccessMode: neo4j.session.READ,
+  });
+
+  try {
+    const queryPromise = session.executeRead((tx) => tx.run(cypher));
+    const timeoutPromise = new Promise<never>((_, reject) => {
+      setTimeout(
+        () => reject(new Error("Query timed out after 15s.")),
+        QUERY_TIMEOUT_MS,
+      );
+    });
+
+    const result = (await Promise.race([queryPromise, timeoutPromise])) as {
+      records: Array<{ keys: readonly string[]; get: (k: string) => unknown }>;
+    };
+
+    const { columns, rows } = serializeRecords(result.records);
+    const elapsedMs = Date.now() - startedAt;
+
+    return NextResponse.json({
+      ok: true,
+      template: { id: "text2cypher", name: "Natural Language" },
+      template_id: "text2cypher",
+      cypher,
+      params: {},
+      columns,
+      rows,
+      stats: { records: rows.length, elapsed_ms: elapsedMs },
+      elapsed_ms: elapsedMs,
+    });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    let status = 500;
+    if (/timed out/i.test(message)) status = 504;
+    else if (/unauthori[sz]ed|authentication/i.test(message)) status = 502;
+    else if (/ServiceUnavailable|routing|connection/i.test(message))
+      status = 503;
+    else if (/Syntax|parameter|Variable .* not defined/i.test(message))
+      status = 400;
+
+    return errorResponse(message, status, {
+      template: { id: "text2cypher", name: "Natural Language" },
+      cypher,
+      elapsed_ms: Date.now() - startedAt,
+    });
+  } finally {
+    try {
+      await session.close();
+    } catch {
+      // non-fatal
     }
   }
 }
